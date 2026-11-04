@@ -1,0 +1,16 @@
+node_modules/
+.pi/
+plugin-data/
+coverage/
+.dist/
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
+.DS_Store
+Thumbs.db

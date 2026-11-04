@@ -1,0 +1,9 @@
+{
+  "id": "paseo-think-what",
+  "name": "Think what",
+  "description": "Translate visible reasoning through direct Gemini or OpenAI-compatible HTTP APIs, manually by default.",
+  "media": [],
+  "requirements": {
+    "paseo": ">=0.15.0"
+  }
+}
