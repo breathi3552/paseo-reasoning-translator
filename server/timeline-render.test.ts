@@ -150,9 +150,11 @@ test("ready retranslation is explicit, rapid-click safe and preserves original/f
   const json = '{"sourceText":"原样保留的 JSON 个案"}';
   h.cached.set("translation-submit", { ...queued, jobId: "old-job", status: "ready", translatedText: json });
   const first = h.render("source");
-  assert.equal(find(first.tree, (node) => node.type === "Markdown").props.children, json);
-  assert.ok(control(first.tree, "重新翻译此思考块"));
-  control(first.tree, "显示原文").props.onPress();
+  control(first.tree, "展开思考内容").props.onPress();
+  const opened = h.render("source");
+  assert.equal(find(opened.tree, (node) => node.type === "Markdown").props.children, json);
+  assert.ok(control(opened.tree, "重新翻译此思考块"));
+  control(opened.tree, "显示原文").props.onPress();
   const original = h.render("source");
   const button = control(original.tree, "重新翻译此思考块");
   button.props.onPress();
@@ -190,6 +192,8 @@ test("queue-full retranslation retry remains an explicit fresh request, not a re
   } });
   h.cached.set("translation-submit", { jobId: "old", status: "ready", translatedText: "old text",
     targetLanguage: "简体中文", reason: null, error: null });
+  const row = h.render("source");
+  control(row.tree, "展开思考内容").props.onPress();
   control(h.render("source").tree, "重新翻译此思考块").props.onPress();
   h.cached.set("translation-submit", await h.render("source").submit.queryFn());
   control(h.render("source").tree, "重试翻译").props.onPress();
@@ -227,9 +231,10 @@ test("actual timeline click to HTTP adapter/service/polling to ready Markdown an
     return result.status === "ready";
   });
   const completed = h.render("source");
-  assert.equal(find(completed.tree, (node) => node.type === "Markdown").props.children, "**HTTP 译文**");
-  assert.equal(requests, 1);
-  control(completed.tree, "显示原文").props.onPress();
+  control(completed.tree, "展开思考内容").props.onPress();
+  const opened = h.render("source");
+  assert.equal(find(opened.tree, (node) => node.type === "Markdown").props.children, "**HTTP 译文**");
+  control(opened.tree, "显示原文").props.onPress();
   assert.equal(find(h.render("source").tree, (node) => node.type === "Markdown"), undefined);
   control(h.render("source").tree, "重新翻译此思考块").props.onPress();
   const retranslation = h.render("source");
@@ -251,4 +256,126 @@ test("actual timeline click to HTTP adapter/service/polling to ready Markdown an
   assert.equal(changed.submit.enabled, false);
   assert.equal(find(changed.tree, (node) => node.type === "Markdown"), undefined);
   assert.equal(requests, 2);
+});
+
+test("streaming auto-collapse: streams expanded, collapses on complete without placeholder text, and toggles via entire header", () => {
+  const h = timelineHarness();
+  // 1. Streaming phase: default expanded
+  const streaming = h.render("Thinking through the problem...", "streaming");
+  assert.ok(find(streaming.tree, (node) => node.type === "StreamedText"));
+  assert.equal(control(streaming.tree, "折叠思考内容")?.type, "Pressable");
+
+  // 2. Complete phase: automatically collapses to single-line tool item
+  const complete = h.render("Thinking through the problem...", "complete");
+  assert.equal(find(complete.tree, (node) => node.type === "StreamedText"), undefined);
+  assert.equal(
+    find(
+      complete.tree,
+      (node) =>
+        node.type === "Text" &&
+        typeof node.props?.children === "string" &&
+        node.props.children.includes("思考内容已折叠"),
+    ),
+    undefined,
+  );
+  const expandHeader = control(complete.tree, "展开思考内容");
+  assert.ok(expandHeader);
+
+  // 3. User clicks header to expand details
+  expandHeader.props.onPress();
+  const expanded = h.render("Thinking through the problem...", "complete");
+  assert.ok(control(expanded.tree, "折叠思考内容"));
+  assert.ok(
+    find(
+      expanded.tree,
+      (node) => node.type === "Text" && node.props?.children === "Thinking through the problem...",
+    ),
+  );
+
+  // 4. User clicks header again to collapse back
+  control(expanded.tree, "折叠思考内容").props.onPress();
+  const reCollapsed = h.render("Thinking through the problem...", "complete");
+  assert.ok(control(reCollapsed.tree, "展开思考内容"));
+});
+
+test("inline silent diagnostics: errors and over-limit stay quiet on header and render details only inside expanded viewport", () => {
+  const h = timelineHarness();
+  const overlimitText = "A".repeat(rpc.MAX_SOURCE_CHARS + 10);
+
+  // 1. Overlimit row collapsed by default: header shows concise tag, no bulky error boxes in tree
+  const collapsed = h.render(overlimitText, "complete");
+  const header = control(collapsed.tree, "展开思考内容");
+  assert.ok(header);
+  assert.ok(find(header, (node) => node.type === "Text" && node.props?.children === "超限"));
+  // No diagnostic text in collapsed view
+  assert.equal(
+    find(
+      collapsed.tree,
+      (node) =>
+        node.type === "Text" &&
+        typeof node.props?.children === "string" &&
+        node.props.children.includes("思考文本超出上限"),
+    ),
+    undefined,
+  );
+
+  // 2. Expand header: error explanation is strictly confined inside detail view
+  header.props.onPress();
+  const expanded = h.render(overlimitText, "complete");
+  const diagnostic = find(
+    expanded.tree,
+    (node) => {
+      if (node.type !== "Text") return false;
+      const text = Array.isArray(node.props?.children)
+        ? node.props.children.join("")
+        : String(node.props?.children ?? "");
+      return text.includes("思考文本超出上限");
+    },
+  );
+  assert.ok(diagnostic);
+});
+
+test("single-viewport toggle: switches between markdown translation and raw source in-place without card bloat", () => {
+  const h = timelineHarness();
+  const readyJob: rpc.TranslationJob = {
+    jobId: "ready-job",
+    status: "ready",
+    translatedText: "### 翻译后的思考流程\n\n步骤清晰。",
+    targetLanguage: "简体中文",
+    reason: null,
+    error: null,
+  };
+  h.cached.set("translation-submit", readyJob);
+
+  // Initial complete render: click to expand
+  const row = h.render("Original thought", "complete");
+  control(row.tree, "展开思考内容").props.onPress();
+  const opened = h.render("Original thought", "complete");
+
+  // Default shows markdown translated text
+  const markdown = find(opened.tree, (node) => node.type === "Markdown");
+  assert.equal(markdown.props.children, "### 翻译后的思考流程\n\n步骤清晰。");
+
+  // Click pill to show original in-place
+  const togglePill = control(opened.tree, "显示原文");
+  assert.ok(togglePill);
+  togglePill.props.onPress();
+  const showingOriginal = h.render("Original thought", "complete");
+
+  // Now markdown is gone, raw text is shown
+  assert.equal(find(showingOriginal.tree, (node) => node.type === "Markdown"), undefined);
+  assert.ok(
+    find(
+      showingOriginal.tree,
+      (node) => node.type === "Text" && node.props?.children === "Original thought",
+    ),
+  );
+
+  // Click pill again to toggle back to translated markdown
+  control(showingOriginal.tree, "显示译文").props.onPress();
+  const backToTranslated = h.render("Original thought", "complete");
+  assert.equal(
+    find(backToTranslated.tree, (node) => node.type === "Markdown").props.children,
+    "### 翻译后的思考流程\n\n步骤清晰。",
+  );
 });
