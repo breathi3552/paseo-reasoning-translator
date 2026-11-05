@@ -169,23 +169,58 @@ function ReasoningBlock({
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        container: {
-          marginVertical: 1,
-          borderRadius: 4,
-        },
-        headerRow: {
+        // Folded state: flat single line item
+        flatRow: {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingVertical: 2,
+          paddingVertical: 3,
           paddingHorizontal: 4,
+          marginVertical: 1,
           minHeight: 24,
           borderRadius: 4,
         },
+        flatTitle: {
+          fontSize: layout.compact ? 11 : 12,
+          fontWeight: "400",
+          color: theme.colors.foregroundMuted,
+        },
+
+        // Expanded state: unified card matching native tool calls (Read/Shell)
+        cardContainer: {
+          marginVertical: 4,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface0,
+          overflow: "hidden",
+        },
+        cardHeader: {
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: layout.compact ? 10 : 12,
+          paddingVertical: 8,
+          backgroundColor: theme.colors.surface2,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border,
+        },
+        cardTitle: {
+          fontSize: layout.compact ? 12 : 13,
+          fontWeight: "600",
+          color: theme.colors.foreground,
+        },
+        cardBody: {
+          paddingHorizontal: layout.compact ? 10 : 12,
+          paddingVertical: layout.compact ? 8 : 10,
+          backgroundColor: theme.colors.surface0,
+        },
+
+        // Common components
         headerLeft: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 6,
+          gap: 8,
           flexShrink: 1,
         },
         headerRight: {
@@ -193,13 +228,8 @@ function ReasoningBlock({
           alignItems: "center",
           gap: 6,
         },
-        title: {
-          fontSize: layout.compact ? 11 : 12,
-          fontWeight: collapsed ? "400" : "500",
-          color: collapsed ? theme.colors.foregroundMuted : theme.colors.foreground,
-        },
         badge: {
-          paddingHorizontal: 3,
+          paddingHorizontal: 4,
           paddingVertical: 1,
         },
         badgeText: {
@@ -220,80 +250,59 @@ function ReasoningBlock({
           color: theme.colors.statusDanger,
         },
         ghostButton: {
-          paddingHorizontal: 5,
-          paddingVertical: 1,
+          paddingHorizontal: 6,
+          paddingVertical: 2,
           borderRadius: 3,
         },
         ghostButtonText: {
-          fontSize: 10,
+          fontSize: 11,
           color: theme.colors.foregroundMuted,
         },
         ghostButtonDanger: {
-          paddingHorizontal: 5,
-          paddingVertical: 1,
+          paddingHorizontal: 6,
+          paddingVertical: 2,
           borderRadius: 3,
         },
         ghostButtonDangerText: {
-          fontSize: 10,
+          fontSize: 11,
           fontWeight: "500",
           color: theme.colors.statusDanger,
         },
         disabledButton: {
           opacity: 0.4,
         },
-        detailWrapper: {
-          marginTop: 2,
-          marginBottom: 3,
-          marginHorizontal: 0,
-          borderRadius: 6,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          backgroundColor: theme.colors.surface0,
-          padding: layout.compact ? 8 : 10,
-        },
-        detailToolbar: {
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "flex-end",
-          marginBottom: 4,
-        },
-        detailActions: {
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 6,
-        },
         pillButton: {
-          paddingHorizontal: 5,
-          paddingVertical: 1,
+          paddingHorizontal: 6,
+          paddingVertical: 2,
           borderRadius: 3,
           backgroundColor: theme.colors.surface1,
         },
         pillButtonText: {
-          fontSize: 10,
-          fontWeight: "400",
-          color: theme.colors.foregroundMuted,
+          fontSize: 11,
+          fontWeight: "500",
+          color: theme.colors.foreground,
         },
         inlineDiagnostic: {
-          marginBottom: 6,
+          marginBottom: 8,
           paddingHorizontal: 8,
           paddingVertical: 4,
           borderRadius: 4,
           backgroundColor: theme.colors.surface1,
         },
         inlineDiagnosticText: {
-          fontSize: 10,
+          fontSize: 11,
           color: theme.colors.statusDanger,
           flexShrink: 1,
         },
         inlineNotice: {
-          marginBottom: 6,
+          marginBottom: 8,
           paddingHorizontal: 8,
           paddingVertical: 4,
           borderRadius: 4,
           backgroundColor: theme.colors.surface1,
         },
         inlineNoticeText: {
-          fontSize: 10,
+          fontSize: 11,
           color: theme.colors.foregroundMuted,
         },
         contentBox: {
@@ -425,21 +434,21 @@ function ReasoningBlock({
     setIntent(next);
   }, [isTranslatedReady, retranslateDisabled, context, intent, submitRpc]);
 
-  return (
-    <View style={styles.container}>
+  if (collapsed) {
+    return (
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={collapsed ? "展开思考内容" : "折叠思考内容"}
+        accessibilityLabel="展开思考内容"
         onPress={toggleCollapse}
-        style={styles.headerRow}
+        style={styles.flatRow}
       >
         <View style={styles.headerLeft}>
           <Icon
-            name={collapsed ? "ChevronRight" : "ChevronDown"}
+            name="ChevronRight"
             size={12}
             color={theme.colors.foregroundMuted}
           />
-          <Text style={styles.title}>思考过程</Text>
+          <Text style={styles.flatTitle}>思考过程</Text>
           <View style={styles.badge}>
             <Text style={badgeTextStyle}>{badgeLabel}</Text>
           </View>
@@ -447,126 +456,151 @@ function ReasoningBlock({
 
         <View style={styles.headerRight} />
       </Pressable>
+    );
+  }
 
-      {!collapsed && (
-        <View style={styles.detailWrapper}>
-          {(isTranslatedReady || (isManual && !intent && !isTranslatedReady) || canRetry) && (
-            <View style={styles.detailToolbar}>
-              <View style={styles.detailActions}>
-                {isTranslatedReady && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={showOriginal ? "显示译文" : "显示原文"}
-                    onPress={() => setShowOriginal((prev) => !prev)}
-                    style={styles.pillButton}
-                  >
-                    <Text style={styles.pillButtonText}>
-                      {showOriginal ? "显示译文" : "显示原文"}
-                    </Text>
-                  </Pressable>
-                )}
-
-                {isTranslatedReady && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="重新翻译此思考块"
-                    accessibilityHint="发起新的模型请求，可能产生额外费用"
-                    accessibilityState={{ disabled: retranslateDisabled, busy }}
-                    disabled={retranslateDisabled}
-                    onPress={handleRetranslate}
-                    style={[styles.ghostButton, retranslateDisabled && styles.disabledButton]}
-                  >
-                    <Text style={styles.ghostButtonText}>重新翻译</Text>
-                  </Pressable>
-                )}
-
-                {isManual && !intent && !isTranslatedReady && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="翻译此思考块"
-                    accessibilityState={{ disabled: !eligible, busy: submitQuery.isFetching }}
-                    disabled={!eligible || submitQuery.isFetching}
-                    onPress={handleTranslate}
-                    style={[styles.ghostButton, !eligible && styles.disabledButton]}
-                  >
-                    <Text style={styles.ghostButtonText}>
-                      {pendingJob?.jobId && (pendingJob.status === "queued" || pendingJob.status === "running")
-                        ? "继续查询"
-                        : "翻译"}
-                    </Text>
-                  </Pressable>
-                )}
-
-                {canRetry && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="重试翻译"
-                    accessibilityState={{ disabled: retryAction === "none", busy }}
-                    disabled={retryAction === "none"}
-                    onPress={handleRetry}
-                    style={[styles.ghostButtonDanger, retryAction === "none" && styles.disabledButton]}
-                  >
-                    <Text style={styles.ghostButtonDangerText}>重试</Text>
-                  </Pressable>
-                )}
-              </View>
-            </View>
-          )}
-
-          {hasError && (
-            <View style={styles.inlineDiagnostic}>
-              <Text style={styles.inlineDiagnosticText}>
-                {errorTitle}：{errorMessage}
-              </Text>
-            </View>
-          )}
-
-          <View style={styles.contentBox}>
-            {!isComplete && (
-              <StreamedText
-                text={item.data.text}
-                phase="streaming"
-                style={styles.reasoningText}
-              />
-            )}
-
-            {isComplete && (
-              <>
-                {context.values?.enabled && !isConnectionConfigured(context.connection) && (
-                  <View style={styles.inlineNotice}>
-                    <Text style={styles.inlineNoticeText}>
-                      翻译连接未配置。请在设置中填写 Base URL、模型 ID 与 API key。
-                    </Text>
-                  </View>
-                )}
-                {submitQuery.isFetching && (
-                  <View style={styles.inlineNotice}>
-                    <Text accessibilityLiveRegion="polite" style={styles.inlineNoticeText}>
-                      正在提交翻译任务...
-                    </Text>
-                  </View>
-                )}
-                {(currentJob?.status === "queued" || currentJob?.status === "running") && (
-                  <View style={styles.inlineNotice}>
-                    <Text style={styles.inlineNoticeText}>
-                      {currentJob.status === "queued"
-                        ? `任务排队中（目标语言：${currentJob.targetLanguage}）...`
-                        : `正在翻译为 ${currentJob.targetLanguage}...`}
-                    </Text>
-                  </View>
-                )}
-                {isTranslatedReady && !showOriginal ? (
-                  <Markdown>{currentJob?.translatedText ?? ""}</Markdown>
-                ) : (
-                  <Text selectable style={styles.reasoningText}>
-                    {item.data.text}
-                  </Text>
-                )}
-              </>
-            )}
+  return (
+    <View style={styles.cardContainer}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="折叠思考内容"
+        onPress={toggleCollapse}
+        style={styles.cardHeader}
+      >
+        <View style={styles.headerLeft}>
+          <Icon name="ChevronDown" size={13} color={theme.colors.foreground} />
+          <Text style={styles.cardTitle}>思考过程</Text>
+          <View style={styles.badge}>
+            <Text style={badgeTextStyle}>{badgeLabel}</Text>
           </View>
         </View>
-      )}
+
+        <View style={styles.headerRight}>
+          {isTranslatedReady && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={showOriginal ? "显示译文" : "显示原文"}
+              onPress={(e) => {
+                (e as any)?.stopPropagation?.();
+                setShowOriginal((prev) => !prev);
+              }}
+              style={styles.pillButton}
+            >
+              <Text style={styles.pillButtonText}>
+                {showOriginal ? "显示译文" : "显示原文"}
+              </Text>
+            </Pressable>
+          )}
+
+          {isTranslatedReady && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="重新翻译此思考块"
+              accessibilityHint="发起新的模型请求，可能产生额外费用"
+              accessibilityState={{ disabled: retranslateDisabled, busy }}
+              disabled={retranslateDisabled}
+              onPress={(e) => {
+                (e as any)?.stopPropagation?.();
+                handleRetranslate();
+              }}
+              style={[styles.ghostButton, retranslateDisabled && styles.disabledButton]}
+            >
+              <Text style={styles.ghostButtonText}>重新翻译</Text>
+            </Pressable>
+          )}
+
+          {isManual && !intent && !isTranslatedReady && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="翻译此思考块"
+              accessibilityState={{ disabled: !eligible, busy: submitQuery.isFetching }}
+              disabled={!eligible || submitQuery.isFetching}
+              onPress={(e) => {
+                (e as any)?.stopPropagation?.();
+                handleTranslate();
+              }}
+              style={[styles.ghostButton, !eligible && styles.disabledButton]}
+            >
+              <Text style={styles.ghostButtonText}>
+                {pendingJob?.jobId && (pendingJob.status === "queued" || pendingJob.status === "running")
+                  ? "继续查询"
+                  : "翻译"}
+              </Text>
+            </Pressable>
+          )}
+
+          {canRetry && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="重试翻译"
+              accessibilityState={{ disabled: retryAction === "none", busy }}
+              disabled={retryAction === "none"}
+              onPress={(e) => {
+                (e as any)?.stopPropagation?.();
+                handleRetry();
+              }}
+              style={[styles.ghostButtonDanger, retryAction === "none" && styles.disabledButton]}
+            >
+              <Text style={styles.ghostButtonDangerText}>重试</Text>
+            </Pressable>
+          )}
+        </View>
+      </Pressable>
+
+      <View style={styles.cardBody}>
+        {hasError && (
+          <View style={styles.inlineDiagnostic}>
+            <Text style={styles.inlineDiagnosticText}>
+              {errorTitle}：{errorMessage}
+            </Text>
+          </View>
+        )}
+
+        <View style={styles.contentBox}>
+          {!isComplete && (
+            <StreamedText
+              text={item.data.text}
+              phase="streaming"
+              style={styles.reasoningText}
+            />
+          )}
+
+          {isComplete && (
+            <>
+              {context.values?.enabled && !isConnectionConfigured(context.connection) && (
+                <View style={styles.inlineNotice}>
+                  <Text style={styles.inlineNoticeText}>
+                    翻译连接未配置。请在设置中填写 Base URL、模型 ID 与 API key。
+                  </Text>
+                </View>
+              )}
+              {submitQuery.isFetching && (
+                <View style={styles.inlineNotice}>
+                  <Text accessibilityLiveRegion="polite" style={styles.inlineNoticeText}>
+                    正在提交翻译任务...
+                  </Text>
+                </View>
+              )}
+              {(currentJob?.status === "queued" || currentJob?.status === "running") && (
+                <View style={styles.inlineNotice}>
+                  <Text style={styles.inlineNoticeText}>
+                    {currentJob.status === "queued"
+                      ? `任务排队中（目标语言：${currentJob.targetLanguage}）...`
+                      : `正在翻译为 ${currentJob.targetLanguage}...`}
+                  </Text>
+                </View>
+              )}
+              {isTranslatedReady && !showOriginal ? (
+                <Markdown>{currentJob?.translatedText ?? ""}</Markdown>
+              ) : (
+                <Text selectable style={styles.reasoningText}>
+                  {item.data.text}
+                </Text>
+              )}
+            </>
+          )}
+        </View>
+      </View>
     </View>
   );
 }

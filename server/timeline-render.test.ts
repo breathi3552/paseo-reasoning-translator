@@ -429,4 +429,14 @@ test("native visual blend: single chevron, clean folded row without right button
     ),
     undefined,
   );
+
+  // 5. Expanded view is a unified card container enclosing cardHeader and cardBody together
+  assert.equal(expanded.tree.type, "View");
+  assert.equal(expanded.tree.props.style?.borderRadius, 8);
+  assert.equal(expanded.tree.props.style?.borderWidth, 1);
+  const header = control(expanded.tree, "折叠思考内容");
+  assert.ok(header);
+  assert.equal(header.props.style?.borderBottomWidth, 1);
+  const titleText = find(header, (n) => n.props?.children === "思考过程");
+  assert.equal(titleText.props.style?.fontWeight, "600");
 });
