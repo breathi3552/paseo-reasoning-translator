@@ -170,17 +170,17 @@ function ReasoningBlock({
     () =>
       StyleSheet.create({
         container: {
-          marginVertical: 2,
-          borderRadius: 6,
+          marginVertical: 1,
+          borderRadius: 4,
         },
         headerRow: {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingVertical: 5,
-          paddingHorizontal: 8,
-          minHeight: 28,
-          borderRadius: 6,
+          paddingVertical: 2,
+          paddingHorizontal: 4,
+          minHeight: 24,
+          borderRadius: 4,
         },
         headerLeft: {
           flexDirection: "row",
@@ -195,13 +195,12 @@ function ReasoningBlock({
         },
         title: {
           fontSize: layout.compact ? 11 : 12,
-          fontWeight: "500",
-          color: theme.colors.foreground,
+          fontWeight: collapsed ? "400" : "500",
+          color: collapsed ? theme.colors.foregroundMuted : theme.colors.foreground,
         },
         badge: {
-          paddingHorizontal: 4,
+          paddingHorizontal: 3,
           paddingVertical: 1,
-          borderRadius: 3,
         },
         badgeText: {
           fontSize: 10,
@@ -221,21 +220,21 @@ function ReasoningBlock({
           color: theme.colors.statusDanger,
         },
         ghostButton: {
-          paddingHorizontal: 6,
-          paddingVertical: 2,
-          borderRadius: 4,
+          paddingHorizontal: 5,
+          paddingVertical: 1,
+          borderRadius: 3,
         },
         ghostButtonText: {
-          fontSize: 11,
+          fontSize: 10,
           color: theme.colors.foregroundMuted,
         },
         ghostButtonDanger: {
-          paddingHorizontal: 6,
-          paddingVertical: 2,
-          borderRadius: 4,
+          paddingHorizontal: 5,
+          paddingVertical: 1,
+          borderRadius: 3,
         },
         ghostButtonDangerText: {
-          fontSize: 11,
+          fontSize: 10,
           fontWeight: "500",
           color: theme.colors.statusDanger,
         },
@@ -244,8 +243,8 @@ function ReasoningBlock({
         },
         detailWrapper: {
           marginTop: 2,
-          marginBottom: 4,
-          marginHorizontal: 4,
+          marginBottom: 3,
+          marginHorizontal: 0,
           borderRadius: 6,
           borderWidth: 1,
           borderColor: theme.colors.border,
@@ -255,16 +254,8 @@ function ReasoningBlock({
         detailToolbar: {
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 6,
-          paddingBottom: 4,
-          borderBottomWidth: 1,
-          borderBottomColor: theme.colors.border,
-        },
-        detailMetaText: {
-          fontSize: 10,
-          color: theme.colors.foregroundMuted,
-          opacity: 0.7,
+          justifyContent: "flex-end",
+          marginBottom: 4,
         },
         detailActions: {
           flexDirection: "row",
@@ -272,15 +263,15 @@ function ReasoningBlock({
           gap: 6,
         },
         pillButton: {
-          paddingHorizontal: 6,
-          paddingVertical: 2,
+          paddingHorizontal: 5,
+          paddingVertical: 1,
           borderRadius: 3,
           backgroundColor: theme.colors.surface1,
         },
         pillButtonText: {
           fontSize: 10,
-          fontWeight: "500",
-          color: theme.colors.foreground,
+          fontWeight: "400",
+          color: theme.colors.foregroundMuted,
         },
         inlineDiagnostic: {
           marginBottom: 6,
@@ -448,118 +439,79 @@ function ReasoningBlock({
             size={12}
             color={theme.colors.foregroundMuted}
           />
-          <Icon name="Brain" size={14} color={theme.colors.foregroundMuted} />
           <Text style={styles.title}>思考过程</Text>
           <View style={styles.badge}>
             <Text style={badgeTextStyle}>{badgeLabel}</Text>
           </View>
         </View>
 
-        <View style={styles.headerRight}>
-          {collapsed && isManual && !intent && !isTranslatedReady && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="翻译此思考块"
-              accessibilityState={{ disabled: !eligible, busy: submitQuery.isFetching }}
-              disabled={!eligible || submitQuery.isFetching}
-              onPress={(e) => {
-                (e as any)?.stopPropagation?.();
-                handleTranslate();
-              }}
-              style={[styles.ghostButton, !eligible && styles.disabledButton]}
-            >
-              <Text style={styles.ghostButtonText}>
-                {pendingJob?.jobId && (pendingJob.status === "queued" || pendingJob.status === "running")
-                  ? "继续查询"
-                  : "翻译"}
-              </Text>
-            </Pressable>
-          )}
-
-          {collapsed && canRetry && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="重试翻译"
-              accessibilityState={{ disabled: retryAction === "none", busy }}
-              disabled={retryAction === "none"}
-              onPress={(e) => {
-                (e as any)?.stopPropagation?.();
-                handleRetry();
-              }}
-              style={[styles.ghostButtonDanger, retryAction === "none" && styles.disabledButton]}
-            >
-              <Text style={styles.ghostButtonDangerText}>重试</Text>
-            </Pressable>
-          )}
-        </View>
+        <View style={styles.headerRight} />
       </Pressable>
 
       {!collapsed && (
         <View style={styles.detailWrapper}>
-          <View style={styles.detailToolbar}>
-            <Text style={styles.detailMetaText}>
-              {isComplete ? `${item.data.text.length.toLocaleString()} 字符` : "实时生成中"}
-            </Text>
+          {(isTranslatedReady || (isManual && !intent && !isTranslatedReady) || canRetry) && (
+            <View style={styles.detailToolbar}>
+              <View style={styles.detailActions}>
+                {isTranslatedReady && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={showOriginal ? "显示译文" : "显示原文"}
+                    onPress={() => setShowOriginal((prev) => !prev)}
+                    style={styles.pillButton}
+                  >
+                    <Text style={styles.pillButtonText}>
+                      {showOriginal ? "显示译文" : "显示原文"}
+                    </Text>
+                  </Pressable>
+                )}
 
-            <View style={styles.detailActions}>
-              {isTranslatedReady && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={showOriginal ? "显示译文" : "显示原文"}
-                  onPress={() => setShowOriginal((prev) => !prev)}
-                  style={styles.pillButton}
-                >
-                  <Text style={styles.pillButtonText}>
-                    {showOriginal ? "显示译文" : "显示原文"}
-                  </Text>
-                </Pressable>
-              )}
+                {isTranslatedReady && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="重新翻译此思考块"
+                    accessibilityHint="发起新的模型请求，可能产生额外费用"
+                    accessibilityState={{ disabled: retranslateDisabled, busy }}
+                    disabled={retranslateDisabled}
+                    onPress={handleRetranslate}
+                    style={[styles.ghostButton, retranslateDisabled && styles.disabledButton]}
+                  >
+                    <Text style={styles.ghostButtonText}>重新翻译</Text>
+                  </Pressable>
+                )}
 
-              {isTranslatedReady && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="重新翻译此思考块"
-                  accessibilityHint="发起新的模型请求，可能产生额外费用"
-                  accessibilityState={{ disabled: retranslateDisabled, busy }}
-                  disabled={retranslateDisabled}
-                  onPress={handleRetranslate}
-                  style={[styles.ghostButton, retranslateDisabled && styles.disabledButton]}
-                >
-                  <Text style={styles.ghostButtonText}>重新翻译</Text>
-                </Pressable>
-              )}
+                {isManual && !intent && !isTranslatedReady && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="翻译此思考块"
+                    accessibilityState={{ disabled: !eligible, busy: submitQuery.isFetching }}
+                    disabled={!eligible || submitQuery.isFetching}
+                    onPress={handleTranslate}
+                    style={[styles.ghostButton, !eligible && styles.disabledButton]}
+                  >
+                    <Text style={styles.ghostButtonText}>
+                      {pendingJob?.jobId && (pendingJob.status === "queued" || pendingJob.status === "running")
+                        ? "继续查询"
+                        : "翻译"}
+                    </Text>
+                  </Pressable>
+                )}
 
-              {isManual && !intent && !isTranslatedReady && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="翻译此思考块"
-                  accessibilityState={{ disabled: !eligible, busy: submitQuery.isFetching }}
-                  disabled={!eligible || submitQuery.isFetching}
-                  onPress={handleTranslate}
-                  style={[styles.ghostButton, !eligible && styles.disabledButton]}
-                >
-                  <Text style={styles.ghostButtonText}>
-                    {pendingJob?.jobId && (pendingJob.status === "queued" || pendingJob.status === "running")
-                      ? "继续查询"
-                      : "翻译"}
-                  </Text>
-                </Pressable>
-              )}
-
-              {canRetry && (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="重试翻译"
-                  accessibilityState={{ disabled: retryAction === "none", busy }}
-                  disabled={retryAction === "none"}
-                  onPress={handleRetry}
-                  style={[styles.ghostButtonDanger, retryAction === "none" && styles.disabledButton]}
-                >
-                  <Text style={styles.ghostButtonDangerText}>重试</Text>
-                </Pressable>
-              )}
+                {canRetry && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="重试翻译"
+                    accessibilityState={{ disabled: retryAction === "none", busy }}
+                    disabled={retryAction === "none"}
+                    onPress={handleRetry}
+                    style={[styles.ghostButtonDanger, retryAction === "none" && styles.disabledButton]}
+                  >
+                    <Text style={styles.ghostButtonDangerText}>重试</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
-          </View>
+          )}
 
           {hasError && (
             <View style={styles.inlineDiagnostic}>

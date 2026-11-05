@@ -89,6 +89,12 @@ function find(node: any, match: (node: any) => boolean): any {
   if (Array.isArray(node)) return node.map((child) => find(child, match)).find(Boolean);
   return match(node) ? node : find(node.props?.children, match);
 }
+function findAll(node: any, match: (node: any) => boolean): any[] {
+  if (!node || typeof node !== "object") return [];
+  if (Array.isArray(node)) return node.flatMap((child) => findAll(child, match));
+  const current = match(node) ? [node] : [];
+  return current.concat(findAll(node.props?.children, match));
+}
 const control = (tree: any, label: string) => find(tree, (node) => node.props?.accessibilityLabel === label);
 
 test("actual timeline element retains mount identity and collapsed state across streamed appends and completion", () => {
@@ -111,19 +117,26 @@ test("actual timeline element retains mount identity and collapsed state across 
 
 test("source changes revoke the actual row's click intent, including A to B to A, without remounting", () => {
   const h = timelineHarness();
-  control(h.render("A").tree, "翻译此思考块").props.onPress();
+  const clickTranslate = (text: string, phase?: "streaming" | "complete", identity?: any) => {
+    const cur = h.render(text, phase, identity);
+    const expand = control(cur.tree, "展开思考内容");
+    if (expand) expand.props.onPress();
+    control(h.render(text, phase, identity).tree, "翻译此思考块").props.onPress();
+  };
+
+  clickTranslate("A");
   assert.equal(h.render("A").submit.enabled, true);
   assert.equal(h.render("B").submit.enabled, false);
   const returned = h.render("A");
   assert.equal(returned.mounts, 1);
   assert.equal(returned.submit.enabled, false);
-  control(returned.tree, "翻译此思考块").props.onPress();
+  clickTranslate("A");
   assert.equal(h.render("A").submit.enabled, true);
   assert.equal(h.render("A", "complete", { host: { id: "other" } }).submit.enabled, false);
   assert.equal(h.render("A", "complete", { agentId: "other" }).submit.enabled, false);
   h.saved.revision = "2";
   assert.equal(h.render("A").submit.enabled, false);
-  control(h.render("A").tree, "翻译此思考块").props.onPress();
+  clickTranslate("A");
   assert.equal(h.render("A").submit.enabled, true);
   h.connection.revision = "rotated-key";
   assert.equal(h.render("A").submit.enabled, false);
@@ -134,6 +147,7 @@ test("manual cached terminal jobs do not label their action Continue checking", 
   const job: rpc.TranslationJob = { jobId: "job", status: "queued", translatedText: null,
     targetLanguage: "简体中文", reason: null, error: null };
   h.cached.set("translation-submit", job);
+  control(h.render("A").tree, "展开思考内容").props.onPress();
   assert.equal(control(h.render("A").tree, "翻译此思考块").props.children.props.children, "继续查询");
   for (const status of ["error", "skipped"] as const) {
     h.cached.set("translation-job", { ...job, status });
@@ -221,7 +235,8 @@ test("actual timeline click to HTTP adapter/service/polling to ready Markdown an
   const original = h.render("source");
   assert.equal(original.submit.enabled, false);
   assert.equal(requests, 0);
-  control(original.tree, "翻译此思考块").props.onPress();
+  control(original.tree, "展开思考内容").props.onPress();
+  control(h.render("source").tree, "翻译此思考块").props.onPress();
   const clicked = h.render("source");
   h.cached.set("translation-submit", await clicked.submit.queryFn());
   const pending = h.render("source");
@@ -231,7 +246,8 @@ test("actual timeline click to HTTP adapter/service/polling to ready Markdown an
     return result.status === "ready";
   });
   const completed = h.render("source");
-  control(completed.tree, "展开思考内容").props.onPress();
+  const expandBtn = control(completed.tree, "展开思考内容");
+  if (expandBtn) expandBtn.props.onPress();
   const opened = h.render("source");
   assert.equal(find(opened.tree, (node) => node.type === "Markdown").props.children, "**HTTP 译文**");
   control(opened.tree, "显示原文").props.onPress();
@@ -377,5 +393,40 @@ test("single-viewport toggle: switches between markdown translation and raw sour
   assert.equal(
     find(backToTranslated.tree, (node) => node.type === "Markdown").props.children,
     "### 翻译后的思考流程\n\n步骤清晰。",
+  );
+});
+
+test("native visual blend: single chevron, clean folded row without right buttons, and no card dividers", () => {
+  const h = timelineHarness();
+  const rendered = h.render("A detailed thought block", "complete");
+
+  // 1. Folded state: only single Chevron icon, no Brain icon, matching native Read/Shell tools
+  const icons = findAll(rendered.tree, (node) => node.type === "Icon");
+  assert.equal(icons.length, 1);
+  assert.equal(icons[0].props.name, "ChevronRight");
+
+  // 2. Folded row right side is 100% clean (no dangling "翻译" or "重试" button)
+  assert.equal(control(rendered.tree, "翻译此思考块"), undefined);
+  assert.equal(control(rendered.tree, "重试翻译"), undefined);
+
+  // 3. Expand to inspect viewport
+  control(rendered.tree, "展开思考内容").props.onPress();
+  const expanded = h.render("A detailed thought block", "complete");
+
+  // In expanded state, chevron flips to ChevronDown and still no Brain icon
+  const expandedIcons = findAll(expanded.tree, (node) => node.type === "Icon");
+  assert.equal(expandedIcons.length, 1);
+  assert.equal(expandedIcons[0].props.name, "ChevronDown");
+
+  // 4. Viewport has no character count noise ("XXX 字符")
+  assert.equal(
+    find(
+      expanded.tree,
+      (node) =>
+        node.type === "Text" &&
+        typeof node.props?.children === "string" &&
+        node.props.children.includes("字符"),
+    ),
+    undefined,
   );
 });
