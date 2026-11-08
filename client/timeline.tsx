@@ -29,6 +29,14 @@ const MONO_FONT =
       })
     : "monospace";
 
+const UI_FONT =
+  typeof Platform !== "undefined" && Platform?.select
+    ? Platform.select({
+        web: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
+        default: undefined,
+      })
+    : undefined;
+
 function getReasonLabel(reason: string | null): string {
   switch (reason) {
     case "disabled":
@@ -90,6 +98,7 @@ function ReasoningBlock({
   // ADR-0002: null means governed by lifecycle (streaming expanded, complete auto-collapsed);
   // boolean means explicitly toggled by user.
   const [userCollapsed, setUserCollapsed] = useState<boolean | null>(null);
+  const [isHovered, setIsHovered] = useState(false);
 
   // Revoke spending permission on every source change, including A → B → A,
   // without resetting user intent or remounting paced text.
@@ -177,26 +186,72 @@ function ReasoningBlock({
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        // Folded state: flat single line item matching native tool calls (Search/Read/Shell)
-        flatRow: {
+        // Folded state: matching native tool calls (Search/Read/Shell/Thinking)
+        foldedContainer: {
+          marginHorizontal: -13,
+          marginTop: -16,
+          marginBottom: -16,
+        },
+        pressable: {
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: "transparent",
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          overflow: "hidden",
+        },
+        headerRow: {
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
-          paddingVertical: 2,
-          paddingHorizontal: 4,
-          marginVertical: 1,
-          minHeight: 24,
-          borderRadius: 6,
         },
-        flatTitle: {
-          fontFamily: MONO_FONT,
-          fontSize: layout.compact ? 11 : 12,
+        labelRow: {
+          flex: 1,
+          flexDirection: "row",
+          alignItems: "center",
+          overflow: "hidden",
+        },
+        iconBadge: {
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: 4,
+          backgroundColor: "transparent",
+        },
+        iconNode: {
+          marginLeft: -1,
+        },
+        chevronNode: {
+          marginLeft: -4,
+          transform: [{ scale: 1.3 }],
+        },
+        label: {
+          fontFamily: UI_FONT,
+          fontSize: layout.compact ? 13 : 14,
           fontWeight: "400",
           color: theme.colors.foregroundMuted,
+          flexShrink: 0,
+        },
+        labelActive: {
+          color: theme.colors.foreground,
+        },
+        secondaryLabel: {
+          fontFamily: UI_FONT,
+          fontSize: layout.compact ? 13 : 14,
+          fontWeight: "400",
+          color: theme.colors.foregroundMuted,
+          marginLeft: 8,
+          flexShrink: 1,
+          minWidth: 0,
+        },
+        secondaryLabelActive: {
+          color: theme.colors.foreground,
         },
 
         // Expanded state: unified card matching native tool calls (Read/Shell)
         cardContainer: {
+          marginHorizontal: -13,
           marginVertical: 4,
           borderRadius: 8,
           borderWidth: 1,
@@ -213,8 +268,8 @@ function ReasoningBlock({
           backgroundColor: theme.colors.surface1,
         },
         cardTitle: {
-          fontFamily: MONO_FONT,
-          fontSize: layout.compact ? 12 : 13,
+          fontFamily: UI_FONT,
+          fontSize: layout.compact ? 13 : 14,
           fontWeight: "500",
           color: theme.colors.foreground,
         },
@@ -239,14 +294,6 @@ function ReasoningBlock({
           alignItems: "center",
           gap: 4,
           flexShrink: 1,
-        },
-        iconBadge: {
-          width: 22,
-          height: 22,
-          borderRadius: 11,
-          alignItems: "center",
-          justifyContent: "center",
-          marginRight: 2,
         },
         headerRight: {
           flexDirection: "row",
@@ -461,6 +508,12 @@ function ReasoningBlock({
     badgeLabel = "待翻译";
   }
 
+  const showSecondary =
+    badgeLabel !== "待翻译" &&
+    badgeLabel !== "原文" &&
+    badgeLabel !== "未配置" &&
+    badgeLabel !== "未开启";
+
   const isTranslatedReady = Boolean(
     currentJob?.status === "ready" && currentJob.translatedText,
   );
@@ -475,28 +528,58 @@ function ReasoningBlock({
 
   if (collapsed) {
     return (
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="展开思考内容"
-        onPress={toggleCollapse}
-        style={styles.flatRow}
-      >
-        <View style={styles.headerLeft}>
-          <View style={styles.iconBadge}>
-            <Icon
-              name="Brain"
-              size={12}
-              color={theme.colors.foregroundMuted}
-            />
-          </View>
-          <Text style={styles.flatTitle}>思考过程</Text>
-          <View style={styles.badge}>
-            <Text style={badgeTextStyle}>{badgeLabel}</Text>
-          </View>
-        </View>
+      <View style={styles.foldedContainer}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="展开思考内容"
+          onPress={toggleCollapse}
+          onHoverIn={() => setIsHovered(true)}
+          onHoverOut={() => setIsHovered(false)}
+          onPointerEnter={() => setIsHovered(true)}
+          onPointerLeave={() => setIsHovered(false)}
+          style={styles.pressable}
+        >
+          <View style={styles.headerRow}>
+            <View style={styles.iconBadge}>
+              {isHovered ? (
+                <View style={styles.chevronNode}>
+                  <Icon
+                    name="ChevronRight"
+                    size={12}
+                    color={theme.colors.foreground}
+                  />
+                </View>
+              ) : (
+                <View style={styles.iconNode}>
+                  <Icon
+                    name="Brain"
+                    size={12}
+                    color={theme.colors.foregroundMuted}
+                  />
+                </View>
+              )}
+            </View>
 
-        <View style={styles.headerRight} />
-      </Pressable>
+            <View style={styles.labelRow}>
+              <Text style={[styles.label, isHovered && styles.labelActive]}>
+                Thinking
+              </Text>
+              {showSecondary && (
+                <Text
+                  style={[
+                    styles.secondaryLabel,
+                    isHovered && styles.secondaryLabelActive,
+                    badgeTextStyle,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {badgeLabel}
+                </Text>
+              )}
+            </View>
+          </View>
+        </Pressable>
+      </View>
     );
   }
 
@@ -512,10 +595,12 @@ function ReasoningBlock({
           <View style={styles.iconBadge}>
             <Icon name="ChevronDown" size={12} color={theme.colors.foreground} />
           </View>
-          <Text style={styles.cardTitle}>思考过程</Text>
-          <View style={styles.badge}>
-            <Text style={badgeTextStyle}>{badgeLabel}</Text>
-          </View>
+          <Text style={styles.cardTitle}>Thinking</Text>
+          {showSecondary && (
+            <View style={styles.badge}>
+              <Text style={badgeTextStyle}>{badgeLabel}</Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.headerRight}>

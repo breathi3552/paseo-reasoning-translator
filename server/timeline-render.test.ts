@@ -436,6 +436,6 @@ test("native visual blend: native brain icon in folded row, smooth chevron in ca
   assert.equal(expanded.tree.props.style?.borderWidth, 1);
   const header = control(expanded.tree, "折叠思考内容");
   assert.ok(header);
-  const titleText = find(header, (n) => n.props?.children === "思考过程");
+  const titleText = find(header, (n) => n.props?.children === "Thinking");
   assert.equal(titleText.props.style?.fontWeight, "500");
 });
