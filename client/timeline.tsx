@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Icon, Markdown, StreamedText } from "@getpaseo/plugin/client/ui";
 import { useMemo, useState, useCallback, useRef } from "react";
 import type { StyleProp, TextStyle, ViewStyle } from "react-native";
-import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { translationSettings } from "../shared/settings";
 import { MAX_SOURCE_CHARS, submitTranslation, getTranslation, type TranslationJob } from "../shared/rpc";
 import {
@@ -252,7 +252,8 @@ function ReasoningBlock({
         // Expanded state: unified card matching native tool calls (Read/Shell)
         cardContainer: {
           marginHorizontal: -13,
-          marginVertical: 4,
+          marginTop: -16,
+          marginBottom: -16,
           borderRadius: 8,
           borderWidth: 1,
           borderColor: theme.colors.border,
@@ -263,8 +264,10 @@ function ReasoningBlock({
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingHorizontal: layout.compact ? 8 : 10,
-          paddingVertical: 6,
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border,
           backgroundColor: theme.colors.surface1,
         },
         cardTitle: {
@@ -273,19 +276,19 @@ function ReasoningBlock({
           fontWeight: "500",
           color: theme.colors.foreground,
         },
-        cardBody: {
-          paddingHorizontal: layout.compact ? 8 : 10,
-          paddingBottom: layout.compact ? 8 : 10,
-          paddingTop: 2,
-          backgroundColor: theme.colors.surface1,
+        detailWrapper: {
+          backgroundColor: theme.colors.surface2,
+          flexShrink: 1,
+          minWidth: 0,
         },
-        innerCodeBox: {
-          backgroundColor: theme.colors.surface0,
-          borderRadius: 6,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-          padding: layout.compact ? 8 : 10,
-          overflow: "hidden",
+        detailScroll: {
+          maxHeight: 360,
+        },
+        detailContent: {
+          padding: layout.compact ? 10 : 12,
+        },
+        chevronDownNode: {
+          transform: [{ scale: 1.3 }],
         },
 
         // Common components
@@ -331,7 +334,7 @@ function ReasoningBlock({
           borderColor: theme.colors.border,
         },
         ghostButtonText: {
-          fontFamily: MONO_FONT,
+          fontFamily: UI_FONT,
           fontSize: 11,
           fontWeight: "500",
           color: theme.colors.foregroundMuted,
@@ -345,7 +348,7 @@ function ReasoningBlock({
           borderColor: theme.colors.statusDanger,
         },
         ghostButtonDangerText: {
-          fontFamily: MONO_FONT,
+          fontFamily: UI_FONT,
           fontSize: 11,
           fontWeight: "500",
           color: theme.colors.statusDanger,
@@ -362,17 +365,21 @@ function ReasoningBlock({
           borderColor: theme.colors.border,
         },
         pillButtonText: {
-          fontFamily: MONO_FONT,
+          fontFamily: UI_FONT,
           fontSize: 11,
           fontWeight: "500",
           color: theme.colors.foreground,
         },
         inlineDiagnostic: {
-          marginBottom: 8,
+          marginHorizontal: 12,
+          marginTop: 8,
+          marginBottom: 4,
           paddingHorizontal: 8,
           paddingVertical: 4,
           borderRadius: 4,
           backgroundColor: theme.colors.surface1,
+          borderWidth: 1,
+          borderColor: theme.colors.statusDanger,
         },
         inlineDiagnosticText: {
           fontSize: 11,
@@ -380,11 +387,15 @@ function ReasoningBlock({
           flexShrink: 1,
         },
         inlineNotice: {
-          marginBottom: 8,
+          marginHorizontal: 12,
+          marginTop: 8,
+          marginBottom: 4,
           paddingHorizontal: 8,
           paddingVertical: 4,
           borderRadius: 4,
           backgroundColor: theme.colors.surface1,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
         },
         inlineNoticeText: {
           fontSize: 11,
@@ -394,10 +405,10 @@ function ReasoningBlock({
           marginTop: 2,
         },
         reasoningText: {
-          fontFamily: MONO_FONT,
-          fontSize: layout.compact ? 11 : 12,
-          lineHeight: layout.compact ? 16 : 18,
-          color: theme.colors.foregroundMuted,
+          fontFamily: UI_FONT,
+          fontSize: layout.compact ? 13 : 14,
+          lineHeight: 22,
+          color: theme.colors.foreground,
         },
       }),
     [theme, layout.compact],
@@ -593,7 +604,9 @@ function ReasoningBlock({
       >
         <View style={styles.headerLeft}>
           <View style={styles.iconBadge}>
-            <Icon name="ChevronDown" size={12} color={theme.colors.foreground} />
+            <View style={styles.chevronDownNode}>
+              <Icon name="ChevronDown" size={12} color={theme.colors.foreground} />
+            </View>
           </View>
           <Text style={styles.cardTitle}>Thinking</Text>
           {showSecondary && (
@@ -675,7 +688,7 @@ function ReasoningBlock({
         </View>
       </Pressable>
 
-      <View style={styles.cardBody}>
+      <View style={styles.detailWrapper}>
         {hasError && (
           <View style={styles.inlineDiagnostic}>
             <Text style={styles.inlineDiagnosticText}>
@@ -684,7 +697,36 @@ function ReasoningBlock({
           </View>
         )}
 
-        <View style={styles.innerCodeBox}>
+        {isComplete && context.values?.enabled && !isConnectionConfigured(context.connection) && (
+          <View style={styles.inlineNotice}>
+            <Text style={styles.inlineNoticeText}>
+              翻译连接未配置。请在设置中填写 Base URL、模型 ID 与 API key。
+            </Text>
+          </View>
+        )}
+        {isComplete && submitQuery.isFetching && (
+          <View style={styles.inlineNotice}>
+            <Text accessibilityLiveRegion="polite" style={styles.inlineNoticeText}>
+              正在提交翻译任务...
+            </Text>
+          </View>
+        )}
+        {isComplete && (currentJob?.status === "queued" || currentJob?.status === "running") && (
+          <View style={styles.inlineNotice}>
+            <Text style={styles.inlineNoticeText}>
+              {currentJob.status === "queued"
+                ? `任务排队中（目标语言：${currentJob.targetLanguage}）...`
+                : `正在翻译为 ${currentJob.targetLanguage}...`}
+            </Text>
+          </View>
+        )}
+
+        <ScrollView
+          style={styles.detailScroll}
+          contentContainerStyle={styles.detailContent}
+          nestedScrollEnabled={true}
+          showsVerticalScrollIndicator={true}
+        >
           {!isComplete && (
             <StreamedText
               text={item.data.text}
@@ -694,40 +736,15 @@ function ReasoningBlock({
           )}
 
           {isComplete && (
-            <>
-              {context.values?.enabled && !isConnectionConfigured(context.connection) && (
-                <View style={styles.inlineNotice}>
-                  <Text style={styles.inlineNoticeText}>
-                    翻译连接未配置。请在设置中填写 Base URL、模型 ID 与 API key。
-                  </Text>
-                </View>
-              )}
-              {submitQuery.isFetching && (
-                <View style={styles.inlineNotice}>
-                  <Text accessibilityLiveRegion="polite" style={styles.inlineNoticeText}>
-                    正在提交翻译任务...
-                  </Text>
-                </View>
-              )}
-              {(currentJob?.status === "queued" || currentJob?.status === "running") && (
-                <View style={styles.inlineNotice}>
-                  <Text style={styles.inlineNoticeText}>
-                    {currentJob.status === "queued"
-                      ? `任务排队中（目标语言：${currentJob.targetLanguage}）...`
-                      : `正在翻译为 ${currentJob.targetLanguage}...`}
-                  </Text>
-                </View>
-              )}
-              {isTranslatedReady && !showOriginal ? (
-                <Markdown>{currentJob?.translatedText ?? ""}</Markdown>
-              ) : (
-                <Text selectable style={styles.reasoningText}>
-                  {item.data.text}
-                </Text>
-              )}
-            </>
+            isTranslatedReady && !showOriginal ? (
+              <Markdown>{currentJob?.translatedText ?? ""}</Markdown>
+            ) : (
+              <Text selectable style={styles.reasoningText}>
+                {item.data.text}
+              </Text>
+            )
           )}
-        </View>
+        </ScrollView>
       </View>
     </View>
   );

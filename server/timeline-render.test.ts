@@ -42,7 +42,7 @@ function timelineHarness(options: { rpc?: (contract: any, input: any) => Promise
       useMemo: (compute: () => unknown) => compute(), useCallback: (fn: unknown) => fn,
     },
     "react-native": {
-      View: "View", Text: "Text", Pressable: "Pressable", StyleSheet: { create: (styles: unknown) => styles },
+      View: "View", Text: "Text", Pressable: "Pressable", ScrollView: "ScrollView", StyleSheet: { create: (styles: unknown) => styles },
     },
     "@getpaseo/plugin/client": { useSettings: () => saved, useRpc: (contract: unknown) => async (input: unknown) => {
       if (options.rpc) return options.rpc(contract, input);
