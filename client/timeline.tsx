@@ -386,21 +386,6 @@ function ReasoningBlock({
           color: theme.colors.statusDanger,
           flexShrink: 1,
         },
-        inlineNotice: {
-          marginHorizontal: 12,
-          marginTop: 8,
-          marginBottom: 4,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          borderRadius: 4,
-          backgroundColor: theme.colors.surface1,
-          borderWidth: 1,
-          borderColor: theme.colors.border,
-        },
-        inlineNoticeText: {
-          fontSize: 11,
-          color: theme.colors.foregroundMuted,
-        },
         contentBox: {
           marginTop: 2,
         },
@@ -693,30 +678,6 @@ function ReasoningBlock({
           <View style={styles.inlineDiagnostic}>
             <Text style={styles.inlineDiagnosticText}>
               {errorTitle}：{errorMessage}
-            </Text>
-          </View>
-        )}
-
-        {isComplete && context.values?.enabled && !isConnectionConfigured(context.connection) && (
-          <View style={styles.inlineNotice}>
-            <Text style={styles.inlineNoticeText}>
-              翻译连接未配置。请在设置中填写 Base URL、模型 ID 与 API key。
-            </Text>
-          </View>
-        )}
-        {isComplete && submitQuery.isFetching && (
-          <View style={styles.inlineNotice}>
-            <Text accessibilityLiveRegion="polite" style={styles.inlineNoticeText}>
-              正在提交翻译任务...
-            </Text>
-          </View>
-        )}
-        {isComplete && (currentJob?.status === "queued" || currentJob?.status === "running") && (
-          <View style={styles.inlineNotice}>
-            <Text style={styles.inlineNoticeText}>
-              {currentJob.status === "queued"
-                ? `任务排队中（目标语言：${currentJob.targetLanguage}）...`
-                : `正在翻译为 ${currentJob.targetLanguage}...`}
             </Text>
           </View>
         )}
