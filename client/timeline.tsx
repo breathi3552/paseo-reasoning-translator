@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Icon, Markdown, StreamedText } from "@getpaseo/plugin/client/ui";
 import { useMemo, useState, useCallback, useRef } from "react";
 import type { StyleProp, TextStyle, ViewStyle } from "react-native";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import { translationSettings } from "../shared/settings";
 import { MAX_SOURCE_CHARS, submitTranslation, getTranslation, type TranslationJob } from "../shared/rpc";
 import {
@@ -20,6 +20,14 @@ import {
 import type { ReasoningData } from "../shared/timeline";
 import { isConnectionConfigured } from "../shared/connection";
 import { useConnection } from "./connection";
+
+const MONO_FONT =
+  typeof Platform !== "undefined" && Platform?.select
+    ? Platform.select({
+        web: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        default: "monospace",
+      })
+    : "monospace";
 
 function getReasonLabel(reason: string | null): string {
   switch (reason) {
@@ -169,18 +177,19 @@ function ReasoningBlock({
   const styles = useMemo(
     () =>
       StyleSheet.create({
-        // Folded state: flat single line item
+        // Folded state: flat single line item matching native tool calls (Search/Read/Shell)
         flatRow: {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingVertical: 3,
+          paddingVertical: 2,
           paddingHorizontal: 4,
           marginVertical: 1,
           minHeight: 24,
-          borderRadius: 4,
+          borderRadius: 6,
         },
         flatTitle: {
+          fontFamily: MONO_FONT,
           fontSize: layout.compact ? 11 : 12,
           fontWeight: "400",
           color: theme.colors.foregroundMuted,
@@ -192,36 +201,52 @@ function ReasoningBlock({
           borderRadius: 8,
           borderWidth: 1,
           borderColor: theme.colors.border,
-          backgroundColor: theme.colors.surface0,
+          backgroundColor: theme.colors.surface1,
           overflow: "hidden",
         },
         cardHeader: {
           flexDirection: "row",
           alignItems: "center",
           justifyContent: "space-between",
-          paddingHorizontal: layout.compact ? 10 : 12,
-          paddingVertical: 8,
-          backgroundColor: theme.colors.surface2,
-          borderBottomWidth: 1,
-          borderBottomColor: theme.colors.border,
+          paddingHorizontal: layout.compact ? 8 : 10,
+          paddingVertical: 6,
+          backgroundColor: theme.colors.surface1,
         },
         cardTitle: {
+          fontFamily: MONO_FONT,
           fontSize: layout.compact ? 12 : 13,
-          fontWeight: "600",
+          fontWeight: "500",
           color: theme.colors.foreground,
         },
         cardBody: {
-          paddingHorizontal: layout.compact ? 10 : 12,
-          paddingVertical: layout.compact ? 8 : 10,
+          paddingHorizontal: layout.compact ? 8 : 10,
+          paddingBottom: layout.compact ? 8 : 10,
+          paddingTop: 2,
+          backgroundColor: theme.colors.surface1,
+        },
+        innerCodeBox: {
           backgroundColor: theme.colors.surface0,
+          borderRadius: 6,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          padding: layout.compact ? 8 : 10,
+          overflow: "hidden",
         },
 
         // Common components
         headerLeft: {
           flexDirection: "row",
           alignItems: "center",
-          gap: 8,
+          gap: 4,
           flexShrink: 1,
+        },
+        iconBadge: {
+          width: 22,
+          height: 22,
+          borderRadius: 11,
+          alignItems: "center",
+          justifyContent: "center",
+          marginRight: 2,
         },
         headerRight: {
           flexDirection: "row",
@@ -233,6 +258,7 @@ function ReasoningBlock({
           paddingVertical: 1,
         },
         badgeText: {
+          fontFamily: MONO_FONT,
           fontSize: 10,
           fontWeight: "400",
           color: theme.colors.foregroundMuted,
@@ -250,20 +276,29 @@ function ReasoningBlock({
           color: theme.colors.statusDanger,
         },
         ghostButton: {
-          paddingHorizontal: 6,
+          paddingHorizontal: 8,
           paddingVertical: 2,
-          borderRadius: 3,
+          borderRadius: 4,
+          backgroundColor: theme.colors.surface2,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
         },
         ghostButtonText: {
+          fontFamily: MONO_FONT,
           fontSize: 11,
+          fontWeight: "500",
           color: theme.colors.foregroundMuted,
         },
         ghostButtonDanger: {
-          paddingHorizontal: 6,
+          paddingHorizontal: 8,
           paddingVertical: 2,
-          borderRadius: 3,
+          borderRadius: 4,
+          backgroundColor: theme.colors.surface2,
+          borderWidth: 1,
+          borderColor: theme.colors.statusDanger,
         },
         ghostButtonDangerText: {
+          fontFamily: MONO_FONT,
           fontSize: 11,
           fontWeight: "500",
           color: theme.colors.statusDanger,
@@ -272,12 +307,15 @@ function ReasoningBlock({
           opacity: 0.4,
         },
         pillButton: {
-          paddingHorizontal: 6,
+          paddingHorizontal: 8,
           paddingVertical: 2,
-          borderRadius: 3,
-          backgroundColor: theme.colors.surface1,
+          borderRadius: 4,
+          backgroundColor: theme.colors.surface2,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
         },
         pillButtonText: {
+          fontFamily: MONO_FONT,
           fontSize: 11,
           fontWeight: "500",
           color: theme.colors.foreground,
@@ -309,6 +347,7 @@ function ReasoningBlock({
           marginTop: 2,
         },
         reasoningText: {
+          fontFamily: MONO_FONT,
           fontSize: layout.compact ? 11 : 12,
           lineHeight: layout.compact ? 16 : 18,
           color: theme.colors.foregroundMuted,
@@ -443,11 +482,13 @@ function ReasoningBlock({
         style={styles.flatRow}
       >
         <View style={styles.headerLeft}>
-          <Icon
-            name="ChevronRight"
-            size={12}
-            color={theme.colors.foregroundMuted}
-          />
+          <View style={styles.iconBadge}>
+            <Icon
+              name="Brain"
+              size={12}
+              color={theme.colors.foregroundMuted}
+            />
+          </View>
           <Text style={styles.flatTitle}>思考过程</Text>
           <View style={styles.badge}>
             <Text style={badgeTextStyle}>{badgeLabel}</Text>
@@ -468,7 +509,9 @@ function ReasoningBlock({
         style={styles.cardHeader}
       >
         <View style={styles.headerLeft}>
-          <Icon name="ChevronDown" size={13} color={theme.colors.foreground} />
+          <View style={styles.iconBadge}>
+            <Icon name="ChevronDown" size={12} color={theme.colors.foreground} />
+          </View>
           <Text style={styles.cardTitle}>思考过程</Text>
           <View style={styles.badge}>
             <Text style={badgeTextStyle}>{badgeLabel}</Text>
@@ -556,7 +599,7 @@ function ReasoningBlock({
           </View>
         )}
 
-        <View style={styles.contentBox}>
+        <View style={styles.innerCodeBox}>
           {!isComplete && (
             <StreamedText
               text={item.data.text}

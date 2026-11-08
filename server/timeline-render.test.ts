@@ -396,14 +396,14 @@ test("single-viewport toggle: switches between markdown translation and raw sour
   );
 });
 
-test("native visual blend: single chevron, clean folded row without right buttons, and no card dividers", () => {
+test("native visual blend: native brain icon in folded row, smooth chevron in card header, and no dangling buttons", () => {
   const h = timelineHarness();
   const rendered = h.render("A detailed thought block", "complete");
 
-  // 1. Folded state: only single Chevron icon, no Brain icon, matching native Read/Shell tools
+  // 1. Folded state: native Brain icon in iconBadge, matching native tool icons (Eye/SquareTerminal/Brain)
   const icons = findAll(rendered.tree, (node) => node.type === "Icon");
   assert.equal(icons.length, 1);
-  assert.equal(icons[0].props.name, "ChevronRight");
+  assert.equal(icons[0].props.name, "Brain");
 
   // 2. Folded row right side is 100% clean (no dangling "翻译" or "重试" button)
   assert.equal(control(rendered.tree, "翻译此思考块"), undefined);
@@ -413,7 +413,7 @@ test("native visual blend: single chevron, clean folded row without right button
   control(rendered.tree, "展开思考内容").props.onPress();
   const expanded = h.render("A detailed thought block", "complete");
 
-  // In expanded state, chevron flips to ChevronDown and still no Brain icon
+  // In expanded state, chevron flips to ChevronDown
   const expandedIcons = findAll(expanded.tree, (node) => node.type === "Icon");
   assert.equal(expandedIcons.length, 1);
   assert.equal(expandedIcons[0].props.name, "ChevronDown");
@@ -436,7 +436,6 @@ test("native visual blend: single chevron, clean folded row without right button
   assert.equal(expanded.tree.props.style?.borderWidth, 1);
   const header = control(expanded.tree, "折叠思考内容");
   assert.ok(header);
-  assert.equal(header.props.style?.borderBottomWidth, 1);
   const titleText = find(header, (n) => n.props?.children === "思考过程");
-  assert.equal(titleText.props.style?.fontWeight, "600");
+  assert.equal(titleText.props.style?.fontWeight, "500");
 });
