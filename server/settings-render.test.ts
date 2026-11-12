@@ -13,7 +13,8 @@ import {
 } from "../shared/connection";
 import { DEFAULT_SETTINGS, type TranslationSettings } from "../shared/settings";
 
-function settingsHarness() {
+function settingsHarness(options: { language?: string } = {}) {
+  const language = options.language ?? "zh-CN";
   const require = createRequire(import.meta.url);
   const slots: any[] = [];
   let cursor = 0;
@@ -46,6 +47,8 @@ function settingsHarness() {
       useState,
       useRef: (value: any) => useState({ current: value })[0],
       useMemo: (fn: () => any) => fn(),
+      createContext: (defaultValue: unknown) => ({ _currentValue: defaultValue }),
+      useContext: (ctx: any) => ctx?._currentValue ?? null,
       useEffect: (fn: () => void, deps: unknown[]) => {
         const slot = cursor++;
         if (!slots[slot] || deps.some((value, index) => !Object.is(value, slots[slot][index]))) {
@@ -132,21 +135,27 @@ function settingsHarness() {
     },
   };
 
-  const source = readFileSync(new URL("../client/settings.tsx", import.meta.url), "utf8");
-  const compiled = transpileModule(source, {
-    fileName: "settings.tsx",
-    compilerOptions: {
-      module: ModuleKind.CommonJS,
-      jsx: JsxEmit.ReactJSX,
-      target: ScriptTarget.ES2020,
-    },
-  }).outputText;
-  const exports: any = {};
-  new Function("require", "exports", compiled)((id: string) => modules[id] ?? require(id), exports);
+  function loadModule(relPath: string, fileName: string) {
+    const source = readFileSync(new URL(relPath, import.meta.url), "utf8");
+    const compiled = transpileModule(source, {
+      fileName,
+      compilerOptions: {
+        module: ModuleKind.CommonJS,
+        jsx: JsxEmit.ReactJSX,
+        target: ScriptTarget.ES2020,
+      },
+    }).outputText;
+    const modExports: any = {};
+    new Function("require", "exports", compiled)((id: string) => modules[id] ?? require(id), modExports);
+    return modExports;
+  }
+
+  modules["./i18n"] = loadModule("../client/i18n.tsx", "i18n.tsx");
+  const exports = loadModule("../client/settings.tsx", "settings.tsx");
 
   function render() {
     const element = exports.TranslationSettingsScreen({
-      host: { id: "h" },
+      host: { id: "h", language },
       theme: { colors: {} },
       layout: { compact: true },
     });
@@ -290,4 +299,34 @@ test("daily settings, key deletion, and on-demand details stay concise until nee
   tree = h.render();
   assert.ok(find(tree, "重新读取连接"));
   assert.equal(find(tree, "放弃未保存更改"), undefined);
+});
+
+test("settings form renders English UI and localizes server errors when host language is en", async () => {
+  const h = settingsHarness({ language: "en" });
+  let tree = h.render();
+
+  assert.equal(collectText(tree).includes("Configured"), true);
+  assert.equal(
+    find(tree, "Translation mode").props.hint,
+    "Manual mode translates only clicked blocks; automatic mode translates completed reasoning",
+  );
+  assert.equal(
+    find(tree, "API Key").props.placeholder,
+    "Saved (leave blank to keep, or enter to replace)",
+  );
+
+  find(tree, "Notes & Limits").props.onPress();
+  tree = h.render();
+  assert.equal(collectText(tree).includes("Request scope"), true);
+
+  h.setFail(true);
+  find(tree, "API Key").props.onChangeText("new-secret");
+  tree = h.render();
+  find(tree, "Save connection").props.onPress();
+  await settle();
+  tree = h.render();
+  assert.equal(
+    collectText(tree).includes("Connection configuration was updated (save conflict). Reload before saving."),
+    true,
+  );
 });

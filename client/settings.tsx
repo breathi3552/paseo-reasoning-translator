@@ -25,12 +25,15 @@ import {
 import { clearTranslationCache, saveConnection } from "../shared/rpc";
 import { translationSettings, type TranslationSettings } from "../shared/settings";
 import { useConnection } from "./connection";
+import { localizeServerError, useI18n } from "./i18n";
 
 export function TranslationSettingsScreen(props: PluginSurfaceProps) {
   return <SettingsForm key={props.host.id} {...props} />;
 }
 
-function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
+function SettingsForm(props: PluginSurfaceProps) {
+  const { theme, layout, host } = props;
+  const { t, language: uiLanguage } = useI18n(props);
   const settings = useSettings(translationSettings);
   const connection = useConnection(host.id);
   const saveRpc = useRpc(saveConnection);
@@ -93,7 +96,11 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
     settingsLock.current = true;
     try {
       if (!(await settings.save({ ...settings.values, ...patch }, settings.revision))) {
-        toast.error(settings.saveError ?? "保存设置失败，请重试");
+        toast.error(
+          settings.saveError
+            ? localizeServerError(settings.saveError, uiLanguage)
+            : t("settings.saveFailedToast"),
+        );
       }
     } finally {
       settingsLock.current = false;
@@ -105,7 +112,7 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
     successMessage: string,
   ) {
     if (result.status !== "saved") {
-      setSaveError(result.error);
+      setSaveError(localizeServerError(result.error, uiLanguage));
       return;
     }
     queries.setQueryData(connectionQueryKey(host.id), result.connection);
@@ -122,11 +129,11 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
   async function handleSaveConnection() {
     if (saveLock.current || connection.status !== "success") return;
     if (keyInput.length > 0 && !keyInput.trim()) {
-      setSaveError("API Key 不能为空白字符");
+      setSaveError(t("settings.apiKey.errorBlank"));
       return;
     }
     if ((targetChanged && connection.data.hasApiKey && !keyInput.trim()) || (keyClearedByTargetChange && !keyInput.trim())) {
-      setSaveError("更改接口格式或 Base URL 后，请重新输入 API Key");
+      setSaveError(t("settings.apiKey.errorTargetChanged"));
       return;
     }
     const key: SaveConnectionInput["key"] = keyInput.trim()
@@ -143,9 +150,9 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
         expectedRevision: form.revision,
         key,
       });
-      await applySavedConnection(result, "连接已保存");
+      await applySavedConnection(result, t("settings.connection.savedToast"));
     } catch {
-      setSaveError("保存连接失败，请检查宿主连接后重试");
+      setSaveError(t("settings.connection.saveFailed"));
     } finally {
       saveLock.current = false;
       setSaving(false);
@@ -165,9 +172,9 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
         expectedRevision: form.revision,
         key: { action: "delete" },
       });
-      await applySavedConnection(result, "已删除保存的密钥");
+      await applySavedConnection(result, t("settings.connection.keyDeletedToast"));
     } catch {
-      setSaveError("删除密钥失败，请检查宿主连接后重试");
+      setSaveError(t("settings.connection.deleteKeyFailed"));
     } finally {
       saveLock.current = false;
       setSaving(false);
@@ -178,7 +185,7 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
     if (saving) return;
     const result = await connection.refetch();
     if (result.isError || !result.data) {
-      toast.error("读取连接失败，请检查宿主连接");
+      toast.error(t("settings.connection.readErrorToast"));
       return;
     }
     const { format, baseUrl, model, revision } = result.data;
@@ -198,9 +205,9 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
       const result = await clearRpc({});
       // Polls are safe to refresh; submit queries are deliberately never invalidated.
       void queries.invalidateQueries({ queryKey: ["translation-job"] });
-      toast.show(`已清理 ${result.cleared} 条缓存记录`, { variant: "success" });
+      toast.show(t("settings.cache.clearedToast", { count: result.cleared }), { variant: "success" });
     } catch {
-      toast.error("清理缓存失败，请重试");
+      toast.error(t("settings.cache.clearFailedToast"));
     } finally {
       clearLock.current = false;
       setClearing(false);
@@ -278,12 +285,12 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
 
   const isConfigured = isConnectionConfigured(connection.data);
   const statusLabel = connection.isPending
-    ? "读取中"
+    ? t("settings.status.loading")
     : connection.isError
-      ? "读取失败"
+      ? t("settings.status.error")
       : isConfigured
-        ? "已配置"
-        : "待配置";
+        ? t("settings.status.configured")
+        : t("settings.status.unconfigured");
   const statusColor = connection.isError
     ? theme.colors.statusDanger
     : isConfigured
@@ -295,11 +302,11 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
       {settings.status === "loading" ? (
         <Loading />
       ) : (
-        <SettingsSection title="翻译设置">
+        <SettingsSection title={t("settings.section.translation")}>
           <SettingsCard>
             <SettingsSwitch
-              label="启用思考翻译"
-              hint="在时间线中将思考过程翻译为目标语言"
+              label={t("settings.enabled.label")}
+              hint={t("settings.enabled.hint")}
               value={settings.status === "ready" && settings.values.enabled}
               disabled={settingsDisabled}
               onValueChange={(enabled) => {
@@ -307,12 +314,12 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
               }}
             />
             <SettingsSelect
-              label="翻译方式"
-              hint="手动模式仅翻译点击的思考块；自动模式翻译已加载的完整思考"
+              label={t("settings.mode.label")}
+              hint={t("settings.mode.hint")}
               value={settings.status === "ready" ? settings.values.translationMode : "manual"}
               options={[
-                { label: "手动点击", value: "manual" },
-                { label: "自动翻译", value: "automatic" },
+                { label: t("settings.mode.manual"), value: "manual" },
+                { label: t("settings.mode.automatic"), value: "automatic" },
               ]}
               disabled={settingsDisabled}
               onValueChange={(translationMode) => {
@@ -321,28 +328,32 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
             />
             <SettingsInput
               key={settings.status === "ready" ? settings.revision : "language"}
-              label="目标语言"
+              label={t("settings.targetLanguage.label")}
               initialValue={settings.status === "ready" ? settings.values.targetLanguage : language}
               onChangeText={setLanguage}
               disabled={settingsDisabled}
-              placeholder="简体中文、English、日本語…"
+              placeholder={t("settings.targetLanguage.placeholder")}
             />
             {languageChanged && (
               <SettingsAction
-                label="保存目标语言"
-                actionLabel="保存语言"
+                label={t("settings.targetLanguage.saveLabel")}
+                actionLabel={t("settings.targetLanguage.saveAction")}
                 disabled={settingsDisabled || !trimmedLanguage}
                 onPress={() => {
                   void saveSettings({ targetLanguage: trimmedLanguage });
                 }}
               />
             )}
-            {settings.saveError && <Text style={styles.error}>{settings.saveError}</Text>}
+            {settings.saveError && (
+              <Text style={styles.error}>
+                {localizeServerError(settings.saveError, uiLanguage)}
+              </Text>
+            )}
             {settings.status !== "ready" && (
               <SettingsAction
-                label="设置不可用"
-                hint="恢复默认翻译设置"
-                actionLabel="恢复默认"
+                label={t("settings.unavailable.label")}
+                hint={t("settings.unavailable.hint")}
+                actionLabel={t("settings.unavailable.action")}
                 onPress={() => {
                   void settings.reset();
                 }}
@@ -351,8 +362,8 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
             )}
             {settings.saveError && (
               <SettingsAction
-                label="重新读取设置"
-                actionLabel="重新加载"
+                label={t("settings.reload.label")}
+                actionLabel={t("settings.reload.action")}
                 onPress={() => {
                   void settings.reload();
                 }}
@@ -364,7 +375,7 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
       )}
 
       <SettingsSection
-        title="接口连接"
+        title={t("settings.section.connection")}
         trailing={
           <View style={styles.badge}>
             <View style={[styles.dot, { backgroundColor: statusColor }]} />
@@ -375,15 +386,15 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
         <SettingsCard>
           {connection.isPending && <Loading />}
           {connection.isError && (
-            <Text style={styles.error}>读取连接配置失败，请检查宿主连接</Text>
+            <Text style={styles.error}>{t("settings.connection.readError")}</Text>
           )}
           <SettingsSelect
-            label="接口格式"
+            label={t("settings.format.label")}
             value={form.format}
             disabled={formDisabled}
             options={[
-              { label: "Google Gemini", value: "gemini" },
-              { label: "OpenAI 兼容", value: "openai" },
+              { label: t("settings.format.gemini"), value: "gemini" },
+              { label: t("settings.format.openai"), value: "openai" },
             ]}
             onValueChange={(format) => {
               edit({
@@ -398,7 +409,7 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
           />
           <SettingsInput
             key={`base-${formEpoch}`}
-            label="Base URL"
+            label={t("settings.baseUrl.label")}
             disabled={formDisabled}
             initialValue={form.baseUrl}
             placeholder={
@@ -408,8 +419,8 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
             }
             hint={
               form.format === "gemini"
-                ? "填写至 /v1beta"
-                : "自动追加 /chat/completions"
+                ? t("settings.baseUrl.hintGemini")
+                : t("settings.baseUrl.hintOpenai")
             }
             onChangeText={(baseUrl) => {
               edit({ baseUrl });
@@ -421,33 +432,35 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
           />
           <SettingsInput
             key={`model-${formEpoch}`}
-            label="模型 ID"
+            label={t("settings.model.label")}
             disabled={formDisabled}
             initialValue={form.model}
             placeholder={
-              form.format === "gemini" ? DEFAULT_CONNECTION.model : "输入模型 ID"
+              form.format === "gemini"
+                ? DEFAULT_CONNECTION.model
+                : t("settings.model.placeholderOpenai")
             }
             onChangeText={(model) => edit({ model })}
           />
           <SettingsInput
             key={`key-${keyEpoch}`}
-            label="API Key"
+            label={t("settings.apiKey.label")}
             secureTextEntry
             initialValue=""
             disabled={formDisabled}
             placeholder={
               targetChanged
-                ? "接口已更改，请重新输入 API Key"
+                ? t("settings.apiKey.placeholderChanged")
                 : connection.data?.hasApiKey
-                  ? "已保存（留空保留，输入则替换）"
-                  : "输入 API Key"
+                  ? t("settings.apiKey.placeholderSaved")
+                  : t("settings.apiKey.placeholderEmpty")
             }
             hint={
               targetChanged
-                ? "更改接口格式或地址后需重新提供密钥"
+                ? t("settings.apiKey.hintChanged")
                 : connection.data?.hasApiKey
                   ? undefined
-                  : "仅保存在本机插件数据目录"
+                  : t("settings.apiKey.hintEmpty")
             }
             onChangeText={(value) => {
               setKeyInput(value);
@@ -462,9 +475,13 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
             </Text>
           )}
           <SettingsAction
-            label="保存连接"
-            hint={dirty ? "保存后将更新连接并清空旧译文缓存" : undefined}
-            actionLabel={saving ? "保存中..." : "保存连接"}
+            label={t("settings.connection.saveLabel")}
+            hint={dirty ? t("settings.connection.saveHint") : undefined}
+            actionLabel={
+              saving
+                ? t("settings.connection.savingAction")
+                : t("settings.connection.saveAction")
+            }
             disabled={formDisabled || !dirty}
             onPress={() => {
               void handleSaveConnection();
@@ -472,8 +489,12 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
           />
           {(dirty || Boolean(saveError) || connection.isError) && (
             <SettingsAction
-              label={dirty ? "放弃未保存更改" : "重新读取连接"}
-              actionLabel="重新加载"
+              label={
+                dirty
+                  ? t("settings.connection.discardLabel")
+                  : t("settings.connection.reloadLabel")
+              }
+              actionLabel={t("settings.connection.reloadAction")}
               disabled={saving || connection.isFetching}
               onPress={() => {
                 void reloadConnection();
@@ -482,8 +503,8 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
           )}
           {Boolean(connection.data?.hasApiKey) && !dirty && (
             <SettingsAction
-              label="删除已保存密钥"
-              actionLabel="删除密钥"
+              label={t("settings.connection.deleteKeyLabel")}
+              actionLabel={t("settings.connection.deleteKeyAction")}
               disabled={formDisabled}
               onPress={() => {
                 void handleDeleteKey();
@@ -493,12 +514,16 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
         </SettingsCard>
       </SettingsSection>
 
-      <SettingsSection title="维护与说明">
+      <SettingsSection title={t("settings.section.maintenance")}>
         <SettingsCard>
           <SettingsAction
-            label="翻译缓存"
-            hint="清空内存译文缓存并取消排队中的任务"
-            actionLabel={clearing ? "清理中..." : "清理缓存"}
+            label={t("settings.cache.label")}
+            hint={t("settings.cache.hint")}
+            actionLabel={
+              clearing
+                ? t("settings.cache.clearingAction")
+                : t("settings.cache.clearAction")
+            }
             disabled={clearing}
             onPress={() => {
               void clearCache();
@@ -507,11 +532,11 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ expanded: showDetails }}
-            accessibilityLabel="说明与限制"
+            accessibilityLabel={t("settings.details.title")}
             onPress={() => setShowDetails((value) => !value)}
             style={styles.disclosureHeader}
           >
-            <Text style={styles.disclosureTitle}>说明与限制</Text>
+            <Text style={styles.disclosureTitle}>{t("settings.details.title")}</Text>
             <Icon
               name={showDetails ? "ChevronUp" : "ChevronDown"}
               size={16}
@@ -520,15 +545,9 @@ function SettingsForm({ theme, layout, host }: PluginSurfaceProps) {
           </Pressable>
           {showDetails && (
             <View style={styles.detailsBox}>
-              <Text style={styles.detailItem}>
-                • 请求范围：仅将当前思考文本与目标语言发送至所选接口，保存连接时不发送测试请求。
-              </Text>
-              <Text style={styles.detailItem}>
-                • 本机存储：API Key 保存在本机 PASEO_HOME/plugin-data/paseo-think-what/connection.json（未加密文件），客户端仅同步无密钥状态。
-              </Text>
-              <Text style={styles.detailItem}>
-                • 运行限制：单条上限 200,000 字符（超 12,000 字符按段串行翻译）；单并发队列上限 64，内存缓存最多 128 条（30 分钟过期）。
-              </Text>
+              <Text style={styles.detailItem}>{t("settings.details.scope")}</Text>
+              <Text style={styles.detailItem}>{t("settings.details.storage")}</Text>
+              <Text style={styles.detailItem}>{t("settings.details.limits")}</Text>
             </View>
           )}
         </SettingsCard>

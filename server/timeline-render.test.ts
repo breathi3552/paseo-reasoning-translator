@@ -14,7 +14,8 @@ import { MemorySettings, MemoryConnection, until } from "./test-helpers";
 
 // Execute the actual TSX with host/RN adapters. The tiny hook driver models only
 // state slots and React's type+key mount identity, not native layout or pacing.
-function timelineHarness(options: { rpc?: (contract: any, input: any) => Promise<unknown> } = {}) {
+function timelineHarness(options: { rpc?: (contract: any, input: any) => Promise<unknown>; language?: string } = {}) {
+  const language = options.language ?? "zh-CN";
   const require = createRequire(import.meta.url);
   let slots: unknown[] = [];
   let cursor = 0;
@@ -40,6 +41,8 @@ function timelineHarness(options: { rpc?: (contract: any, input: any) => Promise
     "react": {
       useState, useRef: (value: unknown) => useState({ current: value })[0],
       useMemo: (compute: () => unknown) => compute(), useCallback: (fn: unknown) => fn,
+      createContext: (defaultValue: unknown) => ({ _currentValue: defaultValue }),
+      useContext: (ctx: any) => ctx?._currentValue ?? null,
     },
     "react-native": {
       View: "View", Text: "Text", Pressable: "Pressable", ScrollView: "ScrollView", StyleSheet: { create: (styles: unknown) => styles },
@@ -56,15 +59,21 @@ function timelineHarness(options: { rpc?: (contract: any, input: any) => Promise
     "./connection": { useConnection: () => ({ status: "success", data: connection }) },
     "../shared/settings": settings, "../shared/rpc": rpc, "../shared/translation-query": queries,
   };
-  const exports: any = {};
-  const source = readFileSync(new URL("../client/timeline.tsx", import.meta.url), "utf8");
-  const compiled = transpileModule(source, { fileName: "timeline.tsx", compilerOptions: {
-    module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, target: ScriptTarget.ES2020,
-  } }).outputText;
-  new Function("require", "exports", compiled)((id: string) => modules[id] ?? require(id), exports);
-  function render(text: string, phase: "streaming" | "complete" = "complete", identity = {}) {
+  function loadModule(relPath: string, fileName: string) {
+    const modExports: any = {};
+    const source = readFileSync(new URL(relPath, import.meta.url), "utf8");
+    const compiled = transpileModule(source, { fileName, compilerOptions: {
+      module: ModuleKind.CommonJS, jsx: JsxEmit.ReactJSX, target: ScriptTarget.ES2020,
+    } }).outputText;
+    new Function("require", "exports", compiled)((id: string) => modules[id] ?? require(id), modExports);
+    return modExports;
+  }
+  modules["./i18n"] = loadModule("../client/i18n.tsx", "i18n.tsx");
+  const exports = loadModule("../client/timeline.tsx", "timeline.tsx");
+  function render(text: string, phase: "streaming" | "complete" = "complete", identity: any = {}) {
     const element = exports.TranslatedReasoning({
-      host: { id: "host" }, agentId: "agent", ...identity,
+      host: { id: "host", language }, agentId: "agent", ...identity,
+      ...(identity.host ? { host: { language, ...identity.host } } : {}),
       item: { data: { text, phase } }, theme: { colors: {} }, layout: { compact: true },
     });
     if (!previous || previous.type !== element.type || previous.key !== element.key) {
@@ -438,4 +447,39 @@ test("native visual blend: native brain icon in folded row, smooth chevron in ca
   assert.ok(header);
   const titleText = find(header, (n) => n.props?.children === "Thinking");
   assert.equal(titleText.props.style?.fontWeight, "500");
+});
+
+test("timeline renders English labels, actions, and localized server errors when host language is en", () => {
+  const h = timelineHarness({ language: "en" });
+  const streaming = h.render("Thinking...", "streaming");
+  assert.ok(control(streaming.tree, "Collapse thinking content"));
+  assert.ok(find(streaming.tree, (node) => node.type === "Text" && node.props?.children === "Thinking..."));
+
+  const complete = h.render("Completed thought", "complete");
+  const expand = control(complete.tree, "Expand thinking content");
+  assert.ok(expand);
+  expand.props.onPress();
+
+  const expanded = h.render("Completed thought", "complete");
+  assert.ok(control(expanded.tree, "Translate this thinking block"));
+
+  h.cached.set("translation-submit", {
+    jobId: "err-1",
+    status: "error",
+    translatedText: null,
+    targetLanguage: "English",
+    reason: null,
+    error: "API key 无效或已过期（HTTP 401）",
+  });
+  control(expanded.tree, "Translate this thinking block").props.onPress();
+  const errored = h.render("Completed thought", "complete");
+  assert.ok(control(errored.tree, "Retry translation"));
+  const diagnostic = find(
+    errored.tree,
+    (node) =>
+      node.type === "Text" &&
+      Array.isArray(node.props?.children) &&
+      node.props.children.join("").includes("API key is invalid or expired (HTTP 401)"),
+  );
+  assert.ok(diagnostic);
 });

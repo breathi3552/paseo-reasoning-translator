@@ -14,3 +14,4 @@ coverage/
 .npmrc
 .DS_Store
 Thumbs.db
+.alma-snapshots

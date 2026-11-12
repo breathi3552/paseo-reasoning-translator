@@ -20,6 +20,12 @@ import {
 import type { ReasoningData } from "../shared/timeline";
 import { isConnectionConfigured } from "../shared/connection";
 import { useConnection } from "./connection";
+import {
+  localizeServerError,
+  useI18n,
+  type TranslationKey,
+  type TranslationParams,
+} from "./i18n";
 
 const MONO_FONT =
   typeof Platform !== "undefined" && Platform?.select
@@ -37,24 +43,27 @@ const UI_FONT =
       })
     : undefined;
 
-function getReasonLabel(reason: string | null): string {
+function getReasonLabel(
+  reason: string | null,
+  t: (key: TranslationKey, params?: TranslationParams) => string,
+): string {
   switch (reason) {
     case "disabled":
-      return "翻译已在设置中关闭";
+      return t("timeline.reason.disabled");
     case "connection_required":
-      return "翻译连接未配置";
+      return t("timeline.reason.connection_required");
     case "connection_changed":
-      return "翻译连接已更新";
+      return t("timeline.reason.connection_changed");
     case "empty_text":
-      return "思考文本为空";
+      return t("timeline.reason.empty_text");
     case "queue_full":
-      return "翻译排队已满（等待队列上限 64，翻译并发 1）";
+      return t("timeline.reason.queue_full");
     case "job_expired":
-      return "任务已过期，请重试";
+      return t("timeline.reason.job_expired");
     case "settings_changed":
-      return "设置已更新";
+      return t("timeline.reason.settings_changed");
     default:
-      return "已跳过";
+      return t("timeline.reason.skipped");
   }
 }
 
@@ -75,12 +84,11 @@ export function TranslatedReasoning(props: PluginTimelineItemProps<ReasoningData
   return <ReasoningBlock key={mountKey} {...props} context={context} />;
 }
 
-function ReasoningBlock({
-  item,
-  theme,
-  layout,
-  context,
-}: PluginTimelineItemProps<ReasoningData> & { context: TranslationContext }) {
+function ReasoningBlock(
+  props: PluginTimelineItemProps<ReasoningData> & { context: TranslationContext },
+) {
+  const { item, theme, layout, context } = props;
+  const { t, language } = useI18n(props);
   const isSettingsReady = context.values !== null;
   const isEnabled = Boolean(context.values?.enabled && isConnectionConfigured(context.connection));
   const isManual = context.values?.translationMode !== "automatic";
@@ -406,47 +414,55 @@ function ReasoningBlock({
 
   if (isComplete) {
     if (isOverLimit) {
-      errorTitle = `思考文本超出上限 (${item.data.text.length.toLocaleString()} / ${MAX_SOURCE_CHARS.toLocaleString()} 字符)`;
-      errorMessage = `文本长度已超过单次翻译最大上限（${MAX_SOURCE_CHARS.toLocaleString()} 字符）。在源思考文本改变或缩短前不可翻译，重试无效。`;
+      errorTitle = t("timeline.error.overLimitTitle", {
+        length: item.data.text.length.toLocaleString(),
+        limit: MAX_SOURCE_CHARS.toLocaleString(),
+      });
+      errorMessage = t("timeline.error.overLimitMessage", {
+        limit: MAX_SOURCE_CHARS.toLocaleString(),
+      });
       canRetry = false;
     } else if (submitQuery.isError) {
-      errorTitle = "提交翻译任务失败（网络或服务异常）";
-      errorMessage =
+      errorTitle = t("timeline.error.submitFailedTitle");
+      const rawError =
         submitQuery.error instanceof Error
           ? submitQuery.error.message
           : String(submitQuery.error);
+      errorMessage = localizeServerError(rawError, language);
       canRetry = true;
     } else if (pollQuery.isError) {
-      errorTitle = "查询翻译进度失败（网络中断或连接断开）";
-      errorMessage =
+      errorTitle = t("timeline.error.pollFailedTitle");
+      const rawError =
         pollQuery.error instanceof Error
           ? pollQuery.error.message
           : String(pollQuery.error);
+      errorMessage = localizeServerError(rawError, language);
       canRetry = true;
     } else if (currentJob?.status === "error") {
-      errorTitle = "翻译执行失败";
-      errorMessage = currentJob.error ?? "翻译过程中出现未知错误";
+      errorTitle = t("timeline.error.jobFailedTitle");
+      errorMessage = currentJob.error
+        ? localizeServerError(currentJob.error, language)
+        : t("timeline.error.unknownError");
       canRetry = true;
     } else if (currentJob?.status === "skipped") {
       if (currentJob.reason === "settings_changed" || currentJob.reason === "connection_changed") {
-        errorTitle = "翻译设置或连接已变化";
-        errorMessage = "旧任务已取消。确认当前连接后，可手动重新翻译此块。";
+        errorTitle = t("timeline.error.configChangedTitle");
+        errorMessage = t("timeline.error.configChangedMessage");
         canRetry = true;
       } else if (currentJob.reason === "queue_full") {
-        errorTitle = "翻译排队已满";
-        errorMessage =
-          "当前等待队列已达到 64 个任务上限（翻译并发为 1），请稍候点击「重试」。";
+        errorTitle = t("timeline.error.queueFullTitle");
+        errorMessage = t("timeline.error.queueFullMessage");
         canRetry = true;
       } else if (currentJob.reason === "job_expired") {
-        errorTitle = "翻译任务已过期";
-        errorMessage = "后台任务已过期清理，可点击「重试」重新提交。";
+        errorTitle = t("timeline.error.jobExpiredTitle");
+        errorMessage = t("timeline.error.jobExpiredMessage");
         canRetry = true;
       } else if (
         currentJob.reason !== "disabled" &&
         currentJob.reason !== "empty_text"
       ) {
-        errorTitle = "翻译已跳过";
-        errorMessage = getReasonLabel(currentJob.reason);
+        errorTitle = t("timeline.error.skippedTitle");
+        errorMessage = getReasonLabel(currentJob.reason, t);
         canRetry = false;
       }
     }
@@ -455,45 +471,50 @@ function ReasoningBlock({
   const hasError = Boolean(errorTitle);
 
   // Compute status badge
-  let badgeLabel = "原文";
+  const originalLabel = t("timeline.badge.original");
+  const pendingLabel = t("timeline.badge.pending");
+  const disabledLabel = t("timeline.badge.disabled");
+  const unconfiguredLabel = t("timeline.badge.unconfigured");
+
+  let badgeLabel = originalLabel;
   let badgeTextStyle: StyleProp<TextStyle> = styles.badgeText;
 
   if (!isComplete) {
-    badgeLabel = "思考中...";
+    badgeLabel = t("timeline.badge.streaming");
     badgeTextStyle = [styles.badgeText, styles.badgeStreamingText];
   } else if (isOverLimit) {
-    badgeLabel = "超限";
+    badgeLabel = t("timeline.badge.overLimit");
     badgeTextStyle = [styles.badgeText, styles.badgeDangerText];
   } else if (!isEnabled) {
     if (isSettingsReady && !context.values?.enabled) {
-      badgeLabel = "未开启";
+      badgeLabel = disabledLabel;
     } else {
-      badgeLabel = "未配置";
+      badgeLabel = unconfiguredLabel;
     }
   } else if (submitQuery.isFetching) {
-    badgeLabel = "提交中...";
+    badgeLabel = t("timeline.badge.submitting");
     badgeTextStyle = [styles.badgeText, styles.badgeWarningText];
   } else if (submitQuery.isError) {
-    badgeLabel = "提交失败";
+    badgeLabel = t("timeline.badge.submitFailed");
     badgeTextStyle = [styles.badgeText, styles.badgeDangerText];
   } else if (pollQuery.isError) {
-    badgeLabel = "查询失败";
+    badgeLabel = t("timeline.badge.pollFailed");
     badgeTextStyle = [styles.badgeText, styles.badgeDangerText];
   } else if (currentJob) {
     if (currentJob.status === "ready") {
       badgeLabel = currentJob.targetLanguage;
       badgeTextStyle = [styles.badgeText, styles.badgeSuccessText];
     } else if (currentJob.status === "running") {
-      badgeLabel = "翻译中...";
+      badgeLabel = t("timeline.badge.running");
       badgeTextStyle = [styles.badgeText, styles.badgeWarningText];
     } else if (currentJob.status === "queued") {
-      badgeLabel = "排队中...";
+      badgeLabel = t("timeline.badge.queued");
       badgeTextStyle = [styles.badgeText, styles.badgeWarningText];
     } else if (currentJob.status === "error") {
-      badgeLabel = "失败";
+      badgeLabel = t("timeline.badge.error");
       badgeTextStyle = [styles.badgeText, styles.badgeDangerText];
     } else if (currentJob.status === "skipped") {
-      badgeLabel = getReasonLabel(currentJob.reason);
+      badgeLabel = getReasonLabel(currentJob.reason, t);
       if (canRetry) {
         badgeTextStyle = [styles.badgeText, styles.badgeWarningText];
       }
@@ -501,14 +522,14 @@ function ReasoningBlock({
   }
 
   if (isManual && eligible && !intent && !currentJob && !submitQuery.isError) {
-    badgeLabel = "待翻译";
+    badgeLabel = pendingLabel;
   }
 
   const showSecondary =
-    badgeLabel !== "待翻译" &&
-    badgeLabel !== "原文" &&
-    badgeLabel !== "未配置" &&
-    badgeLabel !== "未开启";
+    badgeLabel !== pendingLabel &&
+    badgeLabel !== originalLabel &&
+    badgeLabel !== unconfiguredLabel &&
+    badgeLabel !== disabledLabel;
 
   const isTranslatedReady = Boolean(
     currentJob?.status === "ready" && currentJob.translatedText,
@@ -527,7 +548,7 @@ function ReasoningBlock({
       <View style={styles.foldedContainer}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="展开思考内容"
+          accessibilityLabel={t("timeline.expandLabel")}
           onPress={toggleCollapse}
           onHoverIn={() => setIsHovered(true)}
           onHoverOut={() => setIsHovered(false)}
@@ -558,7 +579,7 @@ function ReasoningBlock({
 
             <View style={styles.labelRow}>
               <Text style={[styles.label, isHovered && styles.labelActive]}>
-                Thinking
+                {t("timeline.title")}
               </Text>
               {showSecondary && (
                 <Text
@@ -583,7 +604,7 @@ function ReasoningBlock({
     <View style={styles.cardContainer}>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="折叠思考内容"
+        accessibilityLabel={t("timeline.collapseLabel")}
         onPress={toggleCollapse}
         style={styles.cardHeader}
       >
@@ -593,7 +614,7 @@ function ReasoningBlock({
               <Icon name="ChevronDown" size={12} color={theme.colors.foreground} />
             </View>
           </View>
-          <Text style={styles.cardTitle}>Thinking</Text>
+          <Text style={styles.cardTitle}>{t("timeline.title")}</Text>
           {showSecondary && (
             <View style={styles.badge}>
               <Text style={badgeTextStyle}>{badgeLabel}</Text>
@@ -605,7 +626,11 @@ function ReasoningBlock({
           {isTranslatedReady && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={showOriginal ? "显示译文" : "显示原文"}
+              accessibilityLabel={
+                showOriginal
+                  ? t("timeline.action.showTranslation")
+                  : t("timeline.action.showOriginal")
+              }
               onPress={(e) => {
                 (e as any)?.stopPropagation?.();
                 setShowOriginal((prev) => !prev);
@@ -613,7 +638,9 @@ function ReasoningBlock({
               style={styles.pillButton}
             >
               <Text style={styles.pillButtonText}>
-                {showOriginal ? "显示译文" : "显示原文"}
+                {showOriginal
+                  ? t("timeline.action.showTranslation")
+                  : t("timeline.action.showOriginal")}
               </Text>
             </Pressable>
           )}
@@ -621,8 +648,8 @@ function ReasoningBlock({
           {isTranslatedReady && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="重新翻译此思考块"
-              accessibilityHint="发起新的模型请求，可能产生额外费用"
+              accessibilityLabel={t("timeline.action.retranslateLabel")}
+              accessibilityHint={t("timeline.action.retranslateHint")}
               accessibilityState={{ disabled: retranslateDisabled, busy }}
               disabled={retranslateDisabled}
               onPress={(e) => {
@@ -631,14 +658,16 @@ function ReasoningBlock({
               }}
               style={[styles.ghostButton, retranslateDisabled && styles.disabledButton]}
             >
-              <Text style={styles.ghostButtonText}>重新翻译</Text>
+              <Text style={styles.ghostButtonText}>
+                {t("timeline.action.retranslate")}
+              </Text>
             </Pressable>
           )}
 
           {isManual && !intent && !isTranslatedReady && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="翻译此思考块"
+              accessibilityLabel={t("timeline.action.translateLabel")}
               accessibilityState={{ disabled: !eligible, busy: submitQuery.isFetching }}
               disabled={!eligible || submitQuery.isFetching}
               onPress={(e) => {
@@ -649,8 +678,8 @@ function ReasoningBlock({
             >
               <Text style={styles.ghostButtonText}>
                 {pendingJob?.jobId && (pendingJob.status === "queued" || pendingJob.status === "running")
-                  ? "继续查询"
-                  : "翻译"}
+                  ? t("timeline.action.resumePoll")
+                  : t("timeline.action.translate")}
               </Text>
             </Pressable>
           )}
@@ -658,7 +687,7 @@ function ReasoningBlock({
           {canRetry && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="重试翻译"
+              accessibilityLabel={t("timeline.action.retryLabel")}
               accessibilityState={{ disabled: retryAction === "none", busy }}
               disabled={retryAction === "none"}
               onPress={(e) => {
@@ -667,7 +696,9 @@ function ReasoningBlock({
               }}
               style={[styles.ghostButtonDanger, retryAction === "none" && styles.disabledButton]}
             >
-              <Text style={styles.ghostButtonDangerText}>重试</Text>
+              <Text style={styles.ghostButtonDangerText}>
+                {t("timeline.action.retry")}
+              </Text>
             </Pressable>
           )}
         </View>
@@ -677,7 +708,7 @@ function ReasoningBlock({
         {hasError && (
           <View style={styles.inlineDiagnostic}>
             <Text style={styles.inlineDiagnosticText}>
-              {errorTitle}：{errorMessage}
+              {errorTitle}{t("timeline.error.separator")}{errorMessage}
             </Text>
           </View>
         )}
