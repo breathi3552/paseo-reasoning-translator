@@ -22,22 +22,19 @@ export async function until(check: () => boolean | Promise<boolean>) {
 export class MemorySettings implements PluginSettings<typeof settingsSchema> {
   values: TranslationSettings = settingsSchema.parse({ enabled: true });
   revision = "1";
-  invalid = false;
   private listeners = new Set<(state: PluginSettingsState<typeof settingsSchema>) => void | Promise<void>>();
   async read(): Promise<PluginSettingsState<typeof settingsSchema>> {
-    return this.invalid ? { status: "invalid", revision: this.revision, error: "invalid" }
-      : { status: "ready", revision: this.revision, values: { ...this.values } };
+    return { status: "ready", revision: this.revision, values: { ...this.values } };
   }
   subscribe(listener: (state: PluginSettingsState<typeof settingsSchema>) => void | Promise<void>) {
     this.listeners.add(listener);
     return () => { this.listeners.delete(listener); };
   }
-  async change(patch: Partial<TranslationSettings>, notify = true) {
+  async change(patch: Partial<TranslationSettings>) {
     this.values = { ...this.values, ...patch };
     this.revision = String(Number(this.revision) + 1);
-    if (notify) for (const listener of this.listeners) await listener(await this.read());
+    for (const listener of this.listeners) await listener(await this.read());
   }
-  get listenerCount() { return this.listeners.size; }
 }
 export class MemoryConnection implements ConnectionSource {
   value: PrivateConnection = { ...DEFAULT_CONNECTION, apiKey: "offline-secret", revision: "connection-1" };
@@ -45,18 +42,16 @@ export class MemoryConnection implements ConnectionSource {
   async read() { return { ...this.value }; }
   async metadata() { return publicConnection(this.value); }
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
-  change(patch: Partial<PrivateConnection>, notify = true) {
+  change(patch: Partial<PrivateConnection>) {
     this.value = { ...this.value, ...patch, revision: this.value.revision + "-new" };
-    if (notify) for (const listener of this.listeners) listener();
+    for (const listener of this.listeners) listener();
   }
-  get listenerCount() { return this.listeners.size; }
 }
 export function recordingRunner(run?: (request: TranslationRequest) => Promise<string>) {
   const requests: TranslationRequest[] = [];
-  let closed = false;
   const runner: TranslationRunner = {
     async translate(request) { requests.push(request); return run ? run(request) : "译:" + request.text; },
-    async close() { closed = true; },
+    async close() {},
   };
-  return { runner, requests, isClosed: () => closed };
+  return { runner, requests };
 }
