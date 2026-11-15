@@ -8,7 +8,7 @@ import { getLanguage, t } from "./client/i18n";
 export default function contribute(client: PluginClientContext) {
   // 1. Timeline Transformer: Intercept built-in reasoning timeline items
   client.addTimelineTransformer({
-    id: "think-what-reasoning-transformer",
+    id: "reasoning-translator-transformer",
     query: { itemType: "reasoning" },
     transform({ item, phase }) {
       return {
@@ -35,7 +35,7 @@ export default function contribute(client: PluginClientContext) {
     Component: TranslatedReasoning,
   });
 
-  // 3. Settings Screen (Settings -> Plugins -> paseo-think-what)
+  // 3. Settings Screen (Settings -> Plugins -> paseo-reasoning-translator)
   const settingsTitle = t("entry.settingsTitle", getLanguage());
   const screenTitle = t("entry.screenTitle", getLanguage());
   const commandTitle = t("entry.commandTitle", getLanguage());

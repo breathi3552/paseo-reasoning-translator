@@ -79,7 +79,7 @@ export const translations = {
     "settings.cache.clearFailedToast": "清理缓存失败，请重试",
     "settings.details.title": "说明与限制",
     "settings.details.scope": "• 请求范围：仅将当前思考文本与目标语言发送至所选接口，保存连接时不发送测试请求。",
-    "settings.details.storage": "• 本机存储：API Key 保存在本机 PASEO_HOME/plugin-data/paseo-think-what/connection.json（未加密文件），客户端仅同步无密钥状态。",
+    "settings.details.storage": "• 本机存储：API Key 保存在本机 PASEO_HOME/plugin-data/paseo-reasoning-translator/connection.json（未加密文件），客户端仅同步无密钥状态。",
     "settings.details.limits": "• 运行限制：单条上限 200,000 字符（超 12,000 字符按段串行翻译）；单并发队列上限 64，内存缓存最多 128 条（30 分钟过期）。",
 
     "timeline.title": "Thinking",
@@ -243,7 +243,7 @@ export const translations = {
     "settings.cache.clearFailedToast": "Failed to clear cache. Please retry.",
     "settings.details.title": "Notes & Limits",
     "settings.details.scope": "• Request scope: Sends only visible reasoning text and target language to the configured endpoint. Saving a connection sends no test request.",
-    "settings.details.storage": "• Local storage: API Key is stored in PASEO_HOME/plugin-data/paseo-think-what/connection.json (unencrypted file); clients sync only key-free metadata.",
+    "settings.details.storage": "• Local storage: API Key is stored in PASEO_HOME/plugin-data/paseo-reasoning-translator/connection.json (unencrypted file); clients sync only key-free metadata.",
     "settings.details.limits": "• Runtime limits: Up to 200,000 chars per block (split into 12,000-char chunks serially); concurrency 1, queue limit 64, up to 128 cached results (30-min TTL).",
 
     "timeline.title": "Thinking",

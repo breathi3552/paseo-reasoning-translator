@@ -50,7 +50,7 @@ export class ConnectionStore implements ConnectionSource {
   private writing: Promise<void> = Promise.resolve();
   private readonly listeners = new Set<() => void>();
   constructor(options: { directory?: string } = {}) {
-    this.directory = options.directory ?? join(process.env.PASEO_HOME || join(homedir(), ".paseo"), "plugin-data", "paseo-think-what");
+    this.directory = options.directory ?? join(process.env.PASEO_HOME || join(homedir(), ".paseo"), "plugin-data", "paseo-reasoning-translator");
     this.file = join(this.directory, "connection.json");
   }
   async read(): Promise<PrivateConnection> {

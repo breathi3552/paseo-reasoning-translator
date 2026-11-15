@@ -1,8 +1,8 @@
-# 原型期直接 API 翻译一手事实调研报告（Gemini 原生 HTTP 与 OpenAI 兼容）
+# 直接 API 翻译一手事实调研报告（Gemini 原生 HTTP 与 OpenAI 兼容）
 
-- **查阅日期**：2026-11-04（依据当前系统本机时间核验）
+- **查阅日期**：2026-11-04（已落地至 `server/http-translator.ts` 与 `shared/connection.ts`）
 - **调研范围**：Google Gemini 原生 HTTP `generateContent` 接口（重点 `gemini-3.5-flash-lite`）与 OpenAI 官方 Chat Completions 标准接口（含商汤 SenseNova 日日新兼容模式）
-- **核心原则**：不实现代码，不修改项目已有源码与依赖，纯一手官方文档验证，不采纳未经证明的二手猜测；所有事实标注“已核实”或“待核实”，源不可访问明确记录。
+- **说明**：本文第 1–5 节为原型期调研的一手接口事实归档，第 6 节已同步为当前实际代码约束。
 
 ---
 
@@ -263,41 +263,14 @@
 
 ---
 
-## 六、 对本项目的直接实现建议（只读指引）
+## 六、 当前实现对照（`server/http-translator.ts`）
 
-1. **分流器精简模型**：
-   - 彻底废除任何本地/历史 SDK 包装层或迁移胶水层。
-   - 翻译执行器（Direct API Translator）内部仅保留两个原生 Fetcher：
-     1. `GeminiNativeFetcher`：专司 `generativelanguage.googleapis.com` 的 `generateContent` 协议。
-     2. `OpenAICompatibleFetcher`：专司 OpenAI 兼容规范的 `/chat/completions` 协议（覆盖标准 OpenAI 及商汤 SenseNova）。
-2. **Gemini 请求构造原则**：
-   - 保持 Payload 极简：仅发送 `systemInstruction`（单段指令）与 `contents`（单条 user message）。
-   - **绝对不附带 `generationConfig` 中的 `temperature`、`top_p`、`top_k`**。
-   - 不附带 `thinkingConfig`（依靠模型内建的 minimal 默认行为以降低时延与成本）。
-3. **OpenAI 兼容请求构造原则**：
-   - 请求 URL 动态计算：若配置了 `base_url`，拼接为 `${base_url.replace(/\/+$/, '')}/chat/completions`。
-   - 响应内容安全提取：
-     ```ts
-     const choice = response.choices?.[0];
-     if (!choice) throw new Error("Empty choices in completion response");
-     // 截断与过滤必须先判，严禁将不完整内容作为翻译结果返回
-     if (choice.finish_reason === "length") {
-       throw new Error("Translation output was truncated due to token limit");
-     }
-     if (choice.finish_reason === "content_filter") {
-       throw new Error("Translation output was omitted due to content filter");
-     }
-     if (choice.message?.refusal) {
-       // 固定脱敏错误，严禁拼接 raw refusal，防止泄漏原文或私密内容
-       throw new Error("Translation request was refused by model policy");
-     }
-     if (choice.finish_reason === "stop" && choice.message?.content != null) {
-       return choice.message.content;
-     }
-     throw new Error("No complete textual content returned from completion response");
-     ```
-4. **配置项设计**：
-   - Provider 类型选择：`"gemini"` 或 `"openai-compatible"`。
-   - 模型名称（`model`）：纯文本输入，SenseNova 与 Gemini 均可自由输入。
-   - 基础 URL（`base_url`）：OpenAI 兼容模式下必填/可选填，SenseNova 场景建议占位符提示 `https://api.sensenova.cn/compatible-mode/v2`。
-   - API 密钥（`apiKey`）：密码输入框，Gemini 映射为 `x-goog-api-key`，OpenAI 映射为 `Bearer`。
+当前插件已将上述协议约束落地至单一模块 `server/http-translator.ts`（`createHttpTranslator`），不再拆分为独立 Fetcher 类：
+
+1. **接口格式枚举**（`shared/connection.ts`）：使用 `"gemini"` 与 `"openai"`。
+2. **Gemini 请求构造**：仅发送 `systemInstruction` 与 `contents`（单条 `user` 消息，正文以 JSON `{"targetLanguage": ..., "sourceText": ...}` 包装以防指令注入），不附带采样参数或 `thinkingConfig`。
+3. **OpenAI 兼容请求构造**：请求 URL 为 `${baseUrl}/chat/completions`，`stream: false`，同样仅发送 `system` 与 `user` 两条消息。
+4. **响应提取与拒绝/截断处理**：
+   - 显式拦截 `length` / `MAX_TOKENS` 截断、`refusal` / `content_filter` / `promptFeedback.blockReason` 拒绝与拦截，以及工具调用响应。
+   - Gemini 仅拼接 `thought !== true` 的文本 part，OpenAI 仅读取最终 `assistant` 的非空 `content`。
+   - 报错信息统一脱敏，不透传原始响应体或凭据。
