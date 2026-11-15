@@ -1,4 +1,5 @@
-import { normalizeConnection, type PrivateConnection } from "./connection";
+import type { TestConnectionInput } from "../shared/connection";
+import { ConnectionFailure, normalizeConnection, type ConnectionStore, type PrivateConnection } from "./connection";
 
 export interface HttpResponse {
   ok: boolean;
@@ -172,4 +173,40 @@ export function createHttpTranslator(options: { fetch?: HttpFetch; timeoutMs?: n
       return closing;
     },
   };
+}
+
+export async function probeConnection(
+  connections: Pick<ConnectionStore, "resolveTestConnection">,
+  runner: TranslationRunner,
+  input: TestConnectionInput,
+  signal?: AbortSignal,
+): Promise<{ status: "ok" } | { status: "invalid" | "error"; error: string }> {
+  let target: PrivateConnection;
+  try {
+    target = await connections.resolveTestConnection(input);
+  } catch (error) {
+    return {
+      status: error instanceof ConnectionFailure && error.kind === "invalid" ? "invalid" : "error",
+      error: error instanceof Error ? error.message : "测试连接失败，请检查输入",
+    };
+  }
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  signal?.addEventListener("abort", onAbort, { once: true });
+  try {
+    await runner.translate({
+      connection: target,
+      text: "Hello",
+      language: "English",
+      signal: controller.signal,
+    });
+    return { status: "ok" };
+  } catch (error) {
+    return {
+      status: error instanceof ConnectionFailure ? "invalid" : "error",
+      error: error instanceof TranslationFailure ? error.message : "测试连接失败，请检查网络与连接配置",
+    };
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+  }
 }

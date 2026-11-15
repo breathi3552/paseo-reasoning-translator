@@ -1,6 +1,6 @@
 import { defineRpc } from "@getpaseo/plugin";
 import { z } from "zod";
-import { connectionMetadataSchema, saveConnectionInputSchema } from "./connection";
+import { connectionMetadataSchema, saveConnectionInputSchema, testConnectionInputSchema } from "./connection";
 
 export const MAX_SOURCE_CHARS = 200_000;
 export const getConnection = defineRpc({
@@ -11,6 +11,14 @@ export const saveConnection = defineRpc({
   output: z.discriminatedUnion("status", [
     z.object({ status: z.literal("saved"), connection: connectionMetadataSchema }),
     z.object({ status: z.enum(["conflict", "invalid", "error"]), error: z.string() }),
+  ]),
+});
+export const testConnection = defineRpc({
+  name: "translation.connection.test",
+  input: testConnectionInputSchema,
+  output: z.discriminatedUnion("status", [
+    z.object({ status: z.literal("ok") }),
+    z.object({ status: z.enum(["invalid", "error"]), error: z.string() }),
   ]),
 });
 export const translationJobSchema = z.object({

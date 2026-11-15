@@ -7,25 +7,63 @@ import {
   SettingsAction,
   SettingsCard,
   SettingsInput,
+  SettingsRow,
   SettingsSection,
   SettingsSelect,
   SettingsSwitch,
+  TextInput,
   useToast,
 } from "@getpaseo/plugin/client/ui";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import {
-  DEFAULT_CONNECTION,
+  FORMAT_DEFAULTS,
   connectionQueryKey,
   isConnectionConfigured,
-  type ConnectionFields,
+  type ConnectionFormat,
   type ConnectionMetadata,
-  type SaveConnectionInput,
+  type ConnectionPresetMetadata,
 } from "../shared/connection";
-import { clearTranslationCache, saveConnection } from "../shared/rpc";
+import { clearTranslationCache, saveConnection, testConnection } from "../shared/rpc";
 import { translationSettings, type TranslationSettings } from "../shared/settings";
 import { useConnection } from "./connection";
 import { localizeServerError, useI18n } from "./i18n";
+
+type PresetDraft = {
+  name: string;
+  format: ConnectionFormat;
+  baseUrl: string;
+  model: string;
+  keyInput: string;
+};
+
+type InlineMode = "edit" | "create";
+
+type StatusMessage = {
+  kind: "neutral" | "ok" | "err" | "warn";
+  text: string;
+};
+
+function createBlankDraft(format: ConnectionFormat = "gemini"): PresetDraft {
+  return {
+    name: "",
+    format,
+    baseUrl: FORMAT_DEFAULTS[format].baseUrl,
+    model: FORMAT_DEFAULTS[format].model,
+    keyInput: "",
+  };
+}
+
+function presetToDraft(preset: ConnectionPresetMetadata | null): PresetDraft {
+  if (!preset) return createBlankDraft("gemini");
+  return {
+    name: preset.name,
+    format: preset.format,
+    baseUrl: preset.baseUrl,
+    model: preset.model,
+    keyInput: "",
+  };
+}
 
 export function TranslationSettingsScreen(props: PluginSurfaceProps) {
   return <SettingsForm key={props.host.id} {...props} />;
@@ -37,36 +75,67 @@ function SettingsForm(props: PluginSurfaceProps) {
   const settings = useSettings(translationSettings);
   const connection = useConnection(host.id);
   const saveRpc = useRpc(saveConnection);
+  const testRpc = useRpc(testConnection);
   const clearRpc = useRpc(clearTranslationCache);
   const queries = useQueryClient();
   const toast = useToast();
 
-  const [form, setForm] = useState<ConnectionFields & { revision: string }>({
-    ...DEFAULT_CONNECTION,
-    revision: "unconfigured",
-  });
-  const [dirty, setDirty] = useState(false);
-  const [keyInput, setKeyInput] = useState("");
-  const [keyClearedByTargetChange, setKeyClearedByTargetChange] = useState(false);
-  const [keyEpoch, setKeyEpoch] = useState(0);
+  const [mode, setMode] = useState<InlineMode>("edit");
+  const [draft, setDraft] = useState<PresetDraft>(() => createBlankDraft("gemini"));
   const [formEpoch, setFormEpoch] = useState(0);
+  const [keyEpoch, setKeyEpoch] = useState(0);
+  const [selectEpoch, setSelectEpoch] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string|null>(null);
+  const [testing, setTesting] = useState(false);
+  const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
+  const lastSyncedRevision = useRef<string | null>(null);
   const saveLock = useRef(false);
+  const testLock = useRef(false);
 
   const settingsLock = useRef(false);
+  const pendingSettingsPatch = useRef<Partial<TranslationSettings> | null>(null);
   const [language, setLanguage] = useState("");
   const [clearing, setClearing] = useState(false);
   const clearLock = useRef(false);
   const [showDetails, setShowDetails] = useState(false);
 
-  useEffect(() => {
-    if (connection.data && !dirty) {
-      const { format, baseUrl, model, revision } = connection.data;
-      setForm({ format, baseUrl, model, revision });
-      setFormEpoch((value) => value + 1);
+  const activePreset = useMemo(() => {
+    if (!connection.data?.activePresetId) return null;
+    return connection.data.presets.find((p) => p.id === connection.data.activePresetId) ?? null;
+  }, [connection.data]);
+
+  const hasPresets = Boolean(connection.data && connection.data.presets.length > 0);
+  const isCreate = mode === "create";
+
+  const isDirty = useMemo(() => {
+    if (isCreate) {
+      return Boolean(
+        draft.name.trim() || draft.baseUrl.trim() || draft.model.trim() || draft.keyInput.length > 0,
+      );
     }
-  }, [connection.data, dirty]);
+    if (!activePreset) return false;
+    return (
+      draft.name.trim() !== activePreset.name ||
+      draft.format !== activePreset.format ||
+      draft.baseUrl.trim().replace(/\/+$/, "") !== activePreset.baseUrl ||
+      draft.model.trim() !== activePreset.model ||
+      draft.keyInput.length > 0
+    );
+  }, [isCreate, activePreset, draft]);
+
+  useEffect(() => {
+    if (!connection.data) return;
+    if (lastSyncedRevision.current === connection.data.revision) return;
+    if (mode === "edit" && !isDirty) {
+      const nextActive = connection.data.activePresetId
+        ? connection.data.presets.find((p) => p.id === connection.data.activePresetId) ?? null
+        : null;
+      lastSyncedRevision.current = connection.data.revision;
+      setDraft(presetToDraft(nextActive));
+      setFormEpoch((v) => v + 1);
+      setKeyEpoch((v) => v + 1);
+    }
+  }, [connection.data, mode, isDirty]);
 
   useEffect(() => {
     if (settings.status === "ready") {
@@ -74,25 +143,19 @@ function SettingsForm(props: PluginSurfaceProps) {
     }
   }, [settings.status, settings.status === "ready" ? settings.values.targetLanguage : ""]);
 
-  const edit = (patch: Partial<ConnectionFields>) => {
-    setForm((value) => ({ ...value, ...patch }));
-    setDirty(true);
-    if (saveError) setSaveError(null);
-  };
-
-  const clearKeyInput = () => {
-    setKeyInput("");
-    setKeyEpoch((value) => value + 1);
-  };
-
-  const normalizedBaseUrl = form.baseUrl.trim().replace(/\/+$/, "");
+  const normalizedBaseUrl = draft.baseUrl.trim().replace(/\/+$/, "");
   const targetChanged = Boolean(
-    connection.data &&
-      (form.format !== connection.data.format || normalizedBaseUrl !== connection.data.baseUrl),
+    !isCreate &&
+      activePreset &&
+      (draft.format !== activePreset.format || normalizedBaseUrl !== activePreset.baseUrl),
   );
 
   async function saveSettings(patch: Partial<TranslationSettings>) {
-    if (settings.status !== "ready" || settings.saving || settingsLock.current) return;
+    if (settings.status !== "ready") return;
+    if (settings.saving || settingsLock.current) {
+      pendingSettingsPatch.current = { ...pendingSettingsPatch.current, ...patch };
+      return;
+    }
     settingsLock.current = true;
     try {
       if (!(await settings.save({ ...settings.values, ...patch }, settings.revision))) {
@@ -107,94 +170,296 @@ function SettingsForm(props: PluginSurfaceProps) {
     }
   }
 
-  async function applySavedConnection(
-    result: { status: "saved"; connection: ConnectionMetadata } | { status: "conflict" | "invalid" | "error"; error: string },
-    successMessage: string,
+  useEffect(() => {
+    if (settings.status === "ready" && !settings.saving && !settingsLock.current && pendingSettingsPatch.current) {
+      const queued = pendingSettingsPatch.current;
+      pendingSettingsPatch.current = null;
+      void saveSettings(queued);
+    }
+  }, [settings.status, settings.saving, settings.status === "ready" ? settings.revision : ""]);
+
+  async function commitTargetLanguage() {
+    if (settings.status !== "ready") return;
+    const next = language.trim();
+    if (!next) {
+      setLanguage(settings.values.targetLanguage);
+      return;
+    }
+    if (next === settings.values.targetLanguage) {
+      if (language !== next) setLanguage(next);
+      return;
+    }
+    setLanguage(next);
+    await saveSettings({ targetLanguage: next });
+  }
+
+  function validateDraft(): string | null {
+    if (!draft.name.trim()) return t("settings.preset.errorNameRequired");
+    if (!draft.baseUrl.trim()) return t("settings.preset.errorBaseUrlRequired");
+    if (!draft.model.trim()) return t("settings.preset.errorModelRequired");
+    if (draft.keyInput.length > 0 && !draft.keyInput.trim()) {
+      return t("settings.apiKey.errorBlank");
+    }
+    if (isCreate) {
+      if (!draft.keyInput.trim()) return t("settings.apiKey.errorRequired");
+      return null;
+    }
+    if (!activePreset) return t("settings.preset.modeEmptyDesc");
+    if (targetChanged && !draft.keyInput.trim()) {
+      return t("settings.apiKey.errorTargetChanged");
+    }
+    if (!activePreset.hasApiKey && !draft.keyInput.trim()) {
+      return t("settings.apiKey.errorRequired");
+    }
+    return null;
+  }
+
+  function applySavedConnection(
+    next: ConnectionMetadata,
+    nextStatus: StatusMessage,
+    toastMessage: string,
   ) {
-    if (result.status !== "saved") {
-      setSaveError(localizeServerError(result.error, uiLanguage));
-      return;
-    }
-    queries.setQueryData(connectionQueryKey(host.id), result.connection);
-    const { format, baseUrl, model, revision } = result.connection;
-    setForm({ format, baseUrl, model, revision });
-    setDirty(false);
-    setKeyClearedByTargetChange(false);
-    clearKeyInput();
-    setFormEpoch((value) => value + 1);
+    lastSyncedRevision.current = next.revision;
+    queries.setQueryData(connectionQueryKey(host.id), next);
+    const nextActive = next.activePresetId
+      ? next.presets.find((p) => p.id === next.activePresetId) ?? null
+      : null;
+    setMode("edit");
+    setDraft(presetToDraft(nextActive));
+    setFormEpoch((v) => v + 1);
+    setKeyEpoch((v) => v + 1);
+    setStatusMsg(nextStatus);
     void queries.invalidateQueries({ queryKey: connectionQueryKey(host.id) });
-    toast.show(successMessage, { variant: "success" });
+    toast.show(toastMessage, { variant: "success" });
   }
 
-  async function handleSaveConnection() {
-    if (saveLock.current || connection.status !== "success") return;
-    if (keyInput.length > 0 && !keyInput.trim()) {
-      setSaveError(t("settings.apiKey.errorBlank"));
+  function handleFormatChange(nextFormat: ConnectionFormat) {
+    const prevDefaults = FORMAT_DEFAULTS[draft.format];
+    const nextDefaults = FORMAT_DEFAULTS[nextFormat];
+    const currentBase = draft.baseUrl.trim().replace(/\/+$/, "");
+    const currentModel = draft.model.trim();
+    const shouldPrefillBase = !currentBase || currentBase === prevDefaults.baseUrl;
+    const shouldPrefillModel = !currentModel || currentModel === prevDefaults.model;
+
+    setDraft((prev) => ({
+      ...prev,
+      format: nextFormat,
+      baseUrl: shouldPrefillBase ? nextDefaults.baseUrl : prev.baseUrl,
+      model: shouldPrefillModel ? nextDefaults.model : prev.model,
+    }));
+    // Deliberately keep keyInput and keyEpoch untouched so switching format never clears typed API keys.
+    setFormEpoch((v) => v + 1);
+    setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+  }
+
+  async function handleSelectPreset(nextId: string) {
+    if (!nextId || isCreate || saveLock.current || testLock.current || connection.status !== "success") {
       return;
     }
-    if ((targetChanged && connection.data.hasApiKey && !keyInput.trim()) || (keyClearedByTargetChange && !keyInput.trim())) {
-      setSaveError(t("settings.apiKey.errorTargetChanged"));
+    if (nextId === connection.data.activePresetId) return;
+    if (isDirty) {
+      setSelectEpoch((v) => v + 1);
+      setStatusMsg({ kind: "warn", text: t("settings.preset.dirtySwitchBlocked") });
       return;
     }
-    const key: SaveConnectionInput["key"] = keyInput.trim()
-      ? { action: "replace", value: keyInput }
-      : { action: "keep" };
     saveLock.current = true;
     setSaving(true);
-    setSaveError(null);
     try {
       const result = await saveRpc({
-        format: form.format,
-        baseUrl: form.baseUrl,
-        model: form.model,
-        expectedRevision: form.revision,
-        key,
+        action: "select",
+        expectedRevision: connection.data.revision,
+        id: nextId,
       });
-      await applySavedConnection(result, t("settings.connection.savedToast"));
+      if (result.status !== "saved") {
+        setSelectEpoch((v) => v + 1);
+        setStatusMsg({ kind: "err", text: localizeServerError(result.error, uiLanguage) });
+        return;
+      }
+      const nextName =
+        result.connection.presets.find((p) => p.id === result.connection.activePresetId)?.name ?? "";
+      applySavedConnection(
+        result.connection,
+        { kind: "neutral", text: t("settings.preset.switchedToast", { name: nextName }) },
+        t("settings.preset.switchedToast", { name: nextName }),
+      );
     } catch {
-      setSaveError(t("settings.connection.saveFailed"));
+      setSelectEpoch((v) => v + 1);
+      setStatusMsg({ kind: "err", text: t("settings.preset.switchFailed") });
     } finally {
       saveLock.current = false;
       setSaving(false);
     }
   }
 
-  async function handleDeleteKey() {
-    if (saveLock.current || connection.status !== "success" || !connection.data.hasApiKey) return;
+  function handleStartCreate() {
+    if (isCreate || saving || testing || connection.status !== "success") return;
+    if (isDirty) {
+      setStatusMsg({ kind: "warn", text: t("settings.preset.dirtySwitchBlocked") });
+      return;
+    }
+    setMode("create");
+    setDraft(createBlankDraft("gemini"));
+    setFormEpoch((v) => v + 1);
+    setKeyEpoch((v) => v + 1);
+    setStatusMsg({ kind: "neutral", text: t("settings.preset.statusCreating") });
+  }
+
+  function handleRevertOrCancel() {
+    if (saving || testing) return;
+    setMode("edit");
+    setDraft(presetToDraft(activePreset));
+    setFormEpoch((v) => v + 1);
+    setKeyEpoch((v) => v + 1);
+    setStatusMsg({
+      kind: "neutral",
+      text: isCreate
+        ? t("settings.preset.cancelledCreateStatus")
+        : t("settings.preset.revertedStatus"),
+    });
+  }
+
+  async function handleTestConnection() {
+    if (testLock.current || saveLock.current || connection.status !== "success") return;
+    const validationError = validateDraft();
+    if (validationError) {
+      setStatusMsg({
+        kind: "err",
+        text: t("settings.preset.testFailedPrefix", { reason: validationError }),
+      });
+      return;
+    }
+    testLock.current = true;
+    setTesting(true);
+    try {
+      const result = await testRpc({
+        presetId: isCreate ? null : activePreset?.id ?? null,
+        format: draft.format,
+        baseUrl: draft.baseUrl.trim(),
+        model: draft.model.trim(),
+        key: draft.keyInput.trim()
+          ? { action: "replace", value: draft.keyInput.trim() }
+          : { action: "keep" },
+      });
+      if (result.status === "ok") {
+        setStatusMsg({ kind: "ok", text: t("settings.preset.testSuccessStatus") });
+        toast.show(t("settings.preset.testSuccessToast"), { variant: "success" });
+      } else {
+        setStatusMsg({
+          kind: "err",
+          text: t("settings.preset.testFailedPrefix", {
+            reason: localizeServerError(result.error, uiLanguage),
+          }),
+        });
+      }
+    } catch {
+      setStatusMsg({ kind: "err", text: t("settings.preset.testRequestFailed") });
+    } finally {
+      testLock.current = false;
+      setTesting(false);
+    }
+  }
+
+  async function handleSave() {
+    if (saveLock.current || testLock.current || connection.status !== "success") return;
+    const validationError = validateDraft();
+    if (validationError) {
+      setStatusMsg({ kind: "err", text: validationError });
+      return;
+    }
     saveLock.current = true;
     setSaving(true);
-    setSaveError(null);
     try {
-      const result = await saveRpc({
-        format: form.format,
-        baseUrl: form.baseUrl,
-        model: form.model,
-        expectedRevision: form.revision,
-        key: { action: "delete" },
-      });
-      await applySavedConnection(result, t("settings.connection.keyDeletedToast"));
+      if (isCreate) {
+        const result = await saveRpc({
+          action: "create",
+          expectedRevision: connection.data.revision,
+          name: draft.name.trim(),
+          format: draft.format,
+          baseUrl: draft.baseUrl.trim(),
+          model: draft.model.trim(),
+          apiKey: draft.keyInput.trim(),
+        });
+        if (result.status !== "saved") {
+          setStatusMsg({ kind: "err", text: localizeServerError(result.error, uiLanguage) });
+          return;
+        }
+        applySavedConnection(
+          result.connection,
+          { kind: "ok", text: t("settings.preset.createdToast") },
+          t("settings.preset.createdToast"),
+        );
+      } else if (activePreset) {
+        const result = await saveRpc({
+          action: "update",
+          expectedRevision: connection.data.revision,
+          id: activePreset.id,
+          name: draft.name.trim(),
+          format: draft.format,
+          baseUrl: draft.baseUrl.trim(),
+          model: draft.model.trim(),
+          key: draft.keyInput.trim()
+            ? { action: "replace", value: draft.keyInput.trim() }
+            : { action: "keep" },
+        });
+        if (result.status !== "saved") {
+          setStatusMsg({ kind: "err", text: localizeServerError(result.error, uiLanguage) });
+          return;
+        }
+        applySavedConnection(
+          result.connection,
+          { kind: "ok", text: t("settings.preset.updatedToast") },
+          t("settings.preset.updatedToast"),
+        );
+      }
     } catch {
-      setSaveError(t("settings.connection.deleteKeyFailed"));
+      setStatusMsg({ kind: "err", text: t("settings.preset.saveFailed") });
     } finally {
       saveLock.current = false;
       setSaving(false);
     }
   }
 
-  async function reloadConnection() {
-    if (saving) return;
-    const result = await connection.refetch();
-    if (result.isError || !result.data) {
-      toast.error(t("settings.connection.readErrorToast"));
+  async function handleDeletePreset() {
+    if (
+      isCreate ||
+      !activePreset ||
+      saveLock.current ||
+      testLock.current ||
+      connection.status !== "success"
+    ) {
       return;
     }
-    const { format, baseUrl, model, revision } = result.data;
-    setForm({ format, baseUrl, model, revision });
-    setDirty(false);
-    setSaveError(null);
-    setKeyClearedByTargetChange(false);
-    clearKeyInput();
-    setFormEpoch((value) => value + 1);
+    saveLock.current = true;
+    setSaving(true);
+    try {
+      const result = await saveRpc({
+        action: "delete",
+        expectedRevision: connection.data.revision,
+        id: activePreset.id,
+      });
+      if (result.status !== "saved") {
+        setStatusMsg({ kind: "err", text: localizeServerError(result.error, uiLanguage) });
+        return;
+      }
+      const nextName = result.connection.activePresetId
+        ? result.connection.presets.find((p) => p.id === result.connection.activePresetId)?.name ?? ""
+        : "";
+      applySavedConnection(
+        result.connection,
+        {
+          kind: nextName ? "neutral" : "warn",
+          text: nextName
+            ? t("settings.preset.switchedToast", { name: nextName })
+            : t("settings.preset.modeEmptyDesc"),
+        },
+        t("settings.preset.deletedToast"),
+      );
+    } catch {
+      setStatusMsg({ kind: "err", text: t("settings.preset.deleteFailed") });
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
+    }
   }
 
   async function clearCache() {
@@ -242,6 +507,110 @@ function SettingsForm(props: PluginSurfaceProps) {
           fontSize: 11,
           fontWeight: "600",
         },
+        textInput: {
+          minWidth: layout.compact ? 140 : 200,
+          paddingHorizontal: 10,
+          paddingVertical: 7,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface1,
+          color: theme.colors.foreground,
+          fontSize: 13,
+        },
+        presetHeaderRow: {
+          flexDirection: "row",
+          alignItems: "center",
+          paddingRight: 14,
+          gap: 8,
+        },
+        presetSelectWrap: {
+          flex: 1,
+        },
+        subbar: {
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          paddingHorizontal: 14,
+          paddingVertical: 8,
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.border,
+          backgroundColor: theme.colors.surface1,
+        },
+        modePill: {
+          paddingHorizontal: 8,
+          paddingVertical: 2,
+          borderRadius: 999,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface0,
+        },
+        modePillCreate: {
+          borderColor: theme.colors.accent,
+        },
+        modePillText: {
+          fontSize: 11,
+          fontWeight: "600",
+          color: theme.colors.foregroundMuted,
+        },
+        modePillTextCreate: {
+          color: theme.colors.accent,
+        },
+        subbarText: {
+          flex: 1,
+          fontSize: 12,
+          color: theme.colors.foregroundMuted,
+        },
+        buttonGroup: {
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "flex-end",
+          gap: 8,
+        },
+        button: {
+          paddingHorizontal: 12,
+          paddingVertical: 7,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface1,
+        },
+        buttonPrimary: {
+          borderColor: theme.colors.accent,
+          backgroundColor: theme.colors.accent,
+        },
+        buttonDanger: {
+          borderColor: theme.colors.statusDanger,
+        },
+        buttonDisabled: {
+          opacity: 0.45,
+        },
+        buttonText: {
+          fontSize: 12,
+          fontWeight: "600",
+          color: theme.colors.foreground,
+        },
+        buttonTextPrimary: {
+          color: theme.colors.surface0,
+        },
+        buttonTextDanger: {
+          color: theme.colors.statusDanger,
+        },
+        statusBar: {
+          minHeight: 38,
+          justifyContent: "center",
+          paddingHorizontal: 14,
+          paddingVertical: 8,
+          borderTopWidth: 1,
+          borderTopColor: theme.colors.border,
+          backgroundColor: theme.colors.surface1,
+        },
+        statusText: {
+          fontSize: 12,
+          lineHeight: 18,
+          color: theme.colors.foregroundMuted,
+        },
         error: {
           color: theme.colors.statusDanger,
           fontSize: 12,
@@ -278,10 +647,13 @@ function SettingsForm(props: PluginSurfaceProps) {
   );
 
   const settingsDisabled = settings.status !== "ready" || settings.saving;
-  const formDisabled = saving || connection.status !== "success";
-  const trimmedLanguage = language.trim();
-  const languageChanged =
-    settings.status === "ready" && trimmedLanguage !== settings.values.targetLanguage;
+  const formBusy = saving || testing;
+  const fieldsDisabled = formBusy || connection.status !== "success" || (!hasPresets && !isCreate);
+  const selectDisabled = formBusy || connection.status !== "success" || !hasPresets || isCreate;
+  const addDisabled = formBusy || connection.status !== "success" || isCreate;
+  const revertDisabled = formBusy || (!isCreate && (!hasPresets || !isDirty));
+  const deleteDisabled = formBusy || connection.status !== "success" || !hasPresets || isCreate;
+  const saveDisabled = fieldsDisabled || (!isCreate && !isDirty);
 
   const isConfigured = isConnectionConfigured(connection.data);
   const statusLabel = connection.isPending
@@ -296,6 +668,36 @@ function SettingsForm(props: PluginSurfaceProps) {
     : isConfigured
       ? theme.colors.statusSuccess
       : theme.colors.statusWarning;
+
+  const presetOptions = useMemo(() => {
+    if (!hasPresets || !connection.data) {
+      return [{ label: t("settings.preset.emptyOption"), value: "" }];
+    }
+    return connection.data.presets.map((preset) => ({
+      label: `${preset.name} (${preset.format === "gemini" ? "Gemini" : "OpenAI"})`,
+      value: preset.id,
+    }));
+  }, [hasPresets, connection.data, t]);
+
+  const effectiveStatus: StatusMessage = connection.isPending
+    ? { kind: "neutral", text: t("settings.status.loading") }
+    : connection.isError
+      ? { kind: "err", text: t("settings.connection.readError") }
+      : statusMsg ?? {
+          kind: "neutral",
+          text: hasPresets
+            ? t("settings.preset.statusReady")
+            : t("settings.preset.modeEmptyDesc"),
+        };
+
+  const effectiveStatusColor =
+    effectiveStatus.kind === "err"
+      ? theme.colors.statusDanger
+      : effectiveStatus.kind === "ok"
+        ? theme.colors.statusSuccess
+        : effectiveStatus.kind === "warn"
+          ? theme.colors.statusWarning
+          : theme.colors.foregroundMuted;
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -326,24 +728,26 @@ function SettingsForm(props: PluginSurfaceProps) {
                 void saveSettings({ translationMode });
               }}
             />
-            <SettingsInput
-              key={settings.status === "ready" ? settings.revision : "language"}
+            <SettingsRow
               label={t("settings.targetLanguage.label")}
-              initialValue={settings.status === "ready" ? settings.values.targetLanguage : language}
-              onChangeText={setLanguage}
-              disabled={settingsDisabled}
-              placeholder={t("settings.targetLanguage.placeholder")}
-            />
-            {languageChanged && (
-              <SettingsAction
-                label={t("settings.targetLanguage.saveLabel")}
-                actionLabel={t("settings.targetLanguage.saveAction")}
-                disabled={settingsDisabled || !trimmedLanguage}
-                onPress={() => {
-                  void saveSettings({ targetLanguage: trimmedLanguage });
+              hint={t("settings.targetLanguage.hint")}
+            >
+              <TextInput
+                style={styles.textInput}
+                value={language}
+                onChangeText={setLanguage}
+                editable={!settingsDisabled}
+                placeholder={t("settings.targetLanguage.placeholder")}
+                placeholderTextColor={theme.colors.foregroundMuted}
+                returnKeyType="done"
+                onSubmitEditing={() => {
+                  void commitTargetLanguage();
+                }}
+                onBlur={() => {
+                  void commitTargetLanguage();
                 }}
               />
-            )}
+            </SettingsRow>
             {settings.saveError && (
               <Text style={styles.error}>
                 {localizeServerError(settings.saveError, uiLanguage)}
@@ -384,133 +788,224 @@ function SettingsForm(props: PluginSurfaceProps) {
         }
       >
         <SettingsCard>
-          {connection.isPending && <Loading />}
-          {connection.isError && (
-            <Text style={styles.error}>{t("settings.connection.readError")}</Text>
-          )}
+          <View style={styles.presetHeaderRow}>
+            <View style={styles.presetSelectWrap}>
+              <SettingsSelect
+                key={`preset-select-${selectEpoch}`}
+                label={t("settings.preset.activeLabel")}
+                hint={t("settings.preset.activeHint")}
+                value={hasPresets ? connection.data?.activePresetId ?? "" : ""}
+                disabled={selectDisabled}
+                options={presetOptions}
+                onValueChange={(nextId) => {
+                  void handleSelectPreset(nextId);
+                }}
+              />
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              disabled={addDisabled}
+              onPress={handleStartCreate}
+              style={[styles.button, styles.buttonPrimary, addDisabled && styles.buttonDisabled]}
+            >
+              <Text style={[styles.buttonText, styles.buttonTextPrimary]}>
+                {t("settings.preset.addAction")}
+              </Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.subbar}>
+            <View style={[styles.modePill, isCreate && styles.modePillCreate]}>
+              <Text style={[styles.modePillText, isCreate && styles.modePillTextCreate]}>
+                {isCreate
+                  ? t("settings.preset.modeCreatePill")
+                  : activePreset
+                    ? t("settings.preset.modeEditPill")
+                    : t("settings.preset.modeEmptyPill")}
+              </Text>
+            </View>
+            <Text numberOfLines={1} style={styles.subbarText}>
+              {isCreate
+                ? t("settings.preset.modeCreateDesc")
+                : activePreset
+                  ? activePreset.name
+                  : t("settings.preset.modeEmptyDesc")}
+            </Text>
+          </View>
+
+          <SettingsInput
+            key={`name-${formEpoch}`}
+            label={t("settings.preset.nameLabel")}
+            hint={t("settings.preset.nameHint")}
+            disabled={fieldsDisabled}
+            initialValue={fieldsDisabled ? "" : draft.name}
+            placeholder={t("settings.preset.namePlaceholder")}
+            onChangeText={(name) => {
+              setDraft((prev) => ({ ...prev, name }));
+              if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
+                setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+              }
+            }}
+          />
+
           <SettingsSelect
             label={t("settings.format.label")}
-            value={form.format}
-            disabled={formDisabled}
+            hint={t("settings.format.hint")}
+            value={draft.format}
+            disabled={fieldsDisabled}
             options={[
               { label: t("settings.format.gemini"), value: "gemini" },
               { label: t("settings.format.openai"), value: "openai" },
             ]}
             onValueChange={(format) => {
-              edit({
-                format,
-                baseUrl: format === "gemini" ? DEFAULT_CONNECTION.baseUrl : "",
-                model: format === "gemini" ? DEFAULT_CONNECTION.model : "",
-              });
-              if (keyInput) setKeyClearedByTargetChange(true);
-              clearKeyInput();
-              setFormEpoch((value) => value + 1);
+              handleFormatChange(format);
             }}
           />
+
           <SettingsInput
             key={`base-${formEpoch}`}
             label={t("settings.baseUrl.label")}
-            disabled={formDisabled}
-            initialValue={form.baseUrl}
+            disabled={fieldsDisabled}
+            initialValue={fieldsDisabled ? "" : draft.baseUrl}
             placeholder={
-              form.format === "gemini"
-                ? DEFAULT_CONNECTION.baseUrl
+              draft.format === "gemini"
+                ? FORMAT_DEFAULTS.gemini.baseUrl
                 : "https://api.example.com/v1"
             }
             hint={
-              form.format === "gemini"
+              draft.format === "gemini"
                 ? t("settings.baseUrl.hintGemini")
                 : t("settings.baseUrl.hintOpenai")
             }
             onChangeText={(baseUrl) => {
-              edit({ baseUrl });
-              if (keyInput) {
-                setKeyClearedByTargetChange(true);
-                clearKeyInput();
-              }
+              setDraft((prev) => ({ ...prev, baseUrl }));
+              setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
             }}
           />
+
           <SettingsInput
             key={`model-${formEpoch}`}
             label={t("settings.model.label")}
-            disabled={formDisabled}
-            initialValue={form.model}
+            hint={t("settings.model.hint")}
+            disabled={fieldsDisabled}
+            initialValue={fieldsDisabled ? "" : draft.model}
             placeholder={
-              form.format === "gemini"
-                ? DEFAULT_CONNECTION.model
+              draft.format === "gemini"
+                ? FORMAT_DEFAULTS.gemini.model
                 : t("settings.model.placeholderOpenai")
             }
-            onChangeText={(model) => edit({ model })}
+            onChangeText={(model) => {
+              setDraft((prev) => ({ ...prev, model }));
+              if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
+                setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+              }
+            }}
           />
+
           <SettingsInput
             key={`key-${keyEpoch}`}
             label={t("settings.apiKey.label")}
             secureTextEntry
-            initialValue=""
-            disabled={formDisabled}
+            initialValue={draft.keyInput}
+            disabled={fieldsDisabled}
             placeholder={
-              targetChanged
-                ? t("settings.apiKey.placeholderChanged")
-                : connection.data?.hasApiKey
-                  ? t("settings.apiKey.placeholderSaved")
-                  : t("settings.apiKey.placeholderEmpty")
+              isCreate
+                ? t("settings.apiKey.placeholderEmpty")
+                : targetChanged
+                  ? t("settings.apiKey.placeholderChanged")
+                  : activePreset?.hasApiKey
+                    ? t("settings.apiKey.placeholderSaved")
+                    : t("settings.apiKey.placeholderEmpty")
             }
             hint={
-              targetChanged
-                ? t("settings.apiKey.hintChanged")
-                : connection.data?.hasApiKey
-                  ? undefined
-                  : t("settings.apiKey.hintEmpty")
+              fieldsDisabled && !isCreate && !hasPresets
+                ? t("settings.apiKey.hintEmptyPreset")
+                : isCreate
+                  ? t("settings.apiKey.hintCreate")
+                  : targetChanged
+                    ? t("settings.apiKey.hintTargetChanged")
+                    : activePreset?.hasApiKey
+                      ? t("settings.apiKey.hintEditSaved")
+                      : t("settings.apiKey.hintCreate")
             }
-            onChangeText={(value) => {
-              setKeyInput(value);
-              setKeyClearedByTargetChange(false);
-              setDirty(true);
-              if (saveError) setSaveError(null);
-            }}
-          />
-          {saveError && (
-            <Text accessibilityLiveRegion="polite" style={styles.error}>
-              {saveError}
-            </Text>
-          )}
-          <SettingsAction
-            label={t("settings.connection.saveLabel")}
-            hint={dirty ? t("settings.connection.saveHint") : undefined}
-            actionLabel={
-              saving
-                ? t("settings.connection.savingAction")
-                : t("settings.connection.saveAction")
-            }
-            disabled={formDisabled || !dirty}
-            onPress={() => {
-              void handleSaveConnection();
-            }}
-          />
-          {(dirty || Boolean(saveError) || connection.isError) && (
-            <SettingsAction
-              label={
-                dirty
-                  ? t("settings.connection.discardLabel")
-                  : t("settings.connection.reloadLabel")
+            onChangeText={(keyInput) => {
+              setDraft((prev) => ({ ...prev, keyInput }));
+              if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
+                setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
               }
-              actionLabel={t("settings.connection.reloadAction")}
-              disabled={saving || connection.isFetching}
-              onPress={() => {
-                void reloadConnection();
-              }}
-            />
-          )}
-          {Boolean(connection.data?.hasApiKey) && !dirty && (
-            <SettingsAction
-              label={t("settings.connection.deleteKeyLabel")}
-              actionLabel={t("settings.connection.deleteKeyAction")}
-              disabled={formDisabled}
-              onPress={() => {
-                void handleDeleteKey();
-              }}
-            />
-          )}
+            }}
+          />
+
+          <SettingsRow
+            label={t("settings.preset.actionsLabel")}
+            hint={t("settings.preset.actionsHint")}
+          >
+            <View style={styles.buttonGroup}>
+              <Pressable
+                accessibilityRole="button"
+                disabled={revertDisabled}
+                onPress={handleRevertOrCancel}
+                style={[styles.button, revertDisabled && styles.buttonDisabled]}
+              >
+                <Text style={styles.buttonText}>
+                  {isCreate
+                    ? t("settings.preset.cancelCreateAction")
+                    : t("settings.preset.revertAction")}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={fieldsDisabled}
+                onPress={() => {
+                  void handleTestConnection();
+                }}
+                style={[styles.button, fieldsDisabled && styles.buttonDisabled]}
+              >
+                <Text style={styles.buttonText}>
+                  {testing
+                    ? t("settings.preset.testingAction")
+                    : t("settings.preset.testAction")}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={deleteDisabled}
+                onPress={() => {
+                  void handleDeletePreset();
+                }}
+                style={[styles.button, styles.buttonDanger, deleteDisabled && styles.buttonDisabled]}
+              >
+                <Text style={[styles.buttonText, styles.buttonTextDanger]}>
+                  {t("settings.preset.deleteAction")}
+                </Text>
+              </Pressable>
+
+              <Pressable
+                accessibilityRole="button"
+                disabled={saveDisabled}
+                onPress={() => {
+                  void handleSave();
+                }}
+                style={[styles.button, styles.buttonPrimary, saveDisabled && styles.buttonDisabled]}
+              >
+                <Text style={[styles.buttonText, styles.buttonTextPrimary]}>
+                  {saving
+                    ? t("settings.preset.savingAction")
+                    : isCreate
+                      ? t("settings.preset.saveCreateAction")
+                      : t("settings.preset.saveEditAction")}
+                </Text>
+              </Pressable>
+            </View>
+          </SettingsRow>
+
+          <View style={styles.statusBar}>
+            <Text accessibilityLiveRegion="polite" style={[styles.statusText, { color: effectiveStatusColor }]}>
+              {effectiveStatus.text}
+            </Text>
+          </View>
         </SettingsCard>
       </SettingsSection>
 
