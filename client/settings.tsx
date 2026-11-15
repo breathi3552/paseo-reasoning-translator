@@ -535,6 +535,23 @@ function SettingsForm(props: PluginSurfaceProps) {
         presetSelectWrap: {
           flex: 1,
         },
+        presetNameWrap: {
+          position: "relative",
+        },
+        presetNameOverlay: {
+          position: "absolute",
+          left: 16,
+          top: 0,
+          bottom: 0,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        },
+        presetNameTitle: {
+          fontSize: 14,
+          fontWeight: "500",
+          color: theme.colors.foreground,
+        },
         subbar: {
           flexDirection: "row",
           alignItems: "center",
@@ -550,7 +567,7 @@ function SettingsForm(props: PluginSurfaceProps) {
           paddingVertical: 2,
           borderRadius: 999,
           borderWidth: 1,
-          borderColor: theme.colors.border,
+          borderColor: theme.colors.statusWarning,
           backgroundColor: theme.colors.surface0,
         },
         modePillCreate: {
@@ -559,7 +576,7 @@ function SettingsForm(props: PluginSurfaceProps) {
         modePillText: {
           fontSize: 11,
           fontWeight: "600",
-          color: theme.colors.foregroundMuted,
+          color: theme.colors.statusWarning,
         },
         modePillTextCreate: {
           color: theme.colors.accent,
@@ -658,8 +675,9 @@ function SettingsForm(props: PluginSurfaceProps) {
   const formBusy = saving || testing;
   const fieldsDisabled = formBusy || connection.status !== "success" || (!hasPresets && !isCreate);
   const selectDisabled = formBusy || connection.status !== "success" || !hasPresets || isCreate;
-  const addDisabled = formBusy || connection.status !== "success" || isCreate;
-  const revertDisabled = formBusy || (!isCreate && (!hasPresets || !isDirty));
+  const topButtonIsRevert = isCreate || isDirty;
+  const topButtonDisabled = formBusy || (!topButtonIsRevert && connection.status !== "success");
+  const showModePill = isCreate || isDirty;
   const deleteDisabled = formBusy || connection.status !== "success" || !hasPresets || isCreate;
   const saveDisabled = fieldsDisabled || (!isCreate && !isDirty);
 
@@ -807,52 +825,48 @@ function SettingsForm(props: PluginSurfaceProps) {
             </View>
             <Pressable
               accessibilityRole="button"
-              disabled={revertDisabled}
-              onPress={handleRevertOrCancel}
-              style={[styles.button, revertDisabled && styles.buttonDisabled]}
+              disabled={topButtonDisabled}
+              onPress={topButtonIsRevert ? handleRevertOrCancel : handleStartCreate}
+              style={[
+                styles.button,
+                !topButtonIsRevert && styles.buttonPrimary,
+                topButtonDisabled && styles.buttonDisabled,
+              ]}
             >
-              <Text style={styles.buttonText}>
+              <Text style={[styles.buttonText, !topButtonIsRevert && styles.buttonTextPrimary]}>
                 {isCreate
                   ? t("settings.preset.cancelCreateAction")
-                  : t("settings.preset.revertAction")}
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={addDisabled}
-              onPress={handleStartCreate}
-              style={[styles.button, styles.buttonPrimary, addDisabled && styles.buttonDisabled]}
-            >
-              <Text style={[styles.buttonText, styles.buttonTextPrimary]}>
-                {t("settings.preset.addAction")}
+                  : isDirty
+                    ? t("settings.preset.revertAction")
+                    : t("settings.preset.addAction")}
               </Text>
             </Pressable>
           </View>
 
-
-          <View style={styles.presetHeaderRow}>
-            <View style={styles.presetSelectWrap}>
-              <SettingsInput
-                key={`name-${formEpoch}`}
-                label={t("settings.preset.nameLabel")}
-                disabled={fieldsDisabled}
-                initialValue={fieldsDisabled ? "" : draft.name}
-                onChangeText={(name) => {
-                  setDraft((prev) => ({ ...prev, name }));
-                  if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
-                    setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
-                  }
-                }}
-              />
-            </View>
-            <View style={[styles.modePill, isCreate && styles.modePillCreate]}>
-              <Text style={[styles.modePillText, isCreate && styles.modePillTextCreate]}>
-                {isCreate
-                  ? t("settings.preset.modeCreatePill")
-                  : activePreset
-                    ? t("settings.preset.modeEditPill")
-                    : t("settings.preset.modeEmptyPill")}
-              </Text>
+          <View style={styles.presetNameWrap}>
+            <SettingsInput
+              key={`name-${formEpoch}`}
+              label=""
+              disabled={fieldsDisabled}
+              initialValue={fieldsDisabled ? "" : draft.name}
+              onChangeText={(name) => {
+                setDraft((prev) => ({ ...prev, name }));
+                if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
+                  setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+                }
+              }}
+            />
+            <View pointerEvents="none" style={styles.presetNameOverlay}>
+              <Text style={styles.presetNameTitle}>{t("settings.preset.nameLabel")}</Text>
+              {showModePill && (
+                <View style={[styles.modePill, isCreate && styles.modePillCreate]}>
+                  <Text style={[styles.modePillText, isCreate && styles.modePillTextCreate]}>
+                    {isCreate
+                      ? t("settings.preset.modeCreatePill")
+                      : t("settings.preset.modeEditPill")}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
