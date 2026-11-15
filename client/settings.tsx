@@ -526,6 +526,17 @@ function SettingsForm(props: PluginSurfaceProps) {
           color: theme.colors.foreground,
           fontSize: 13,
         },
+        wideTextInput: {
+          width: layout.compact ? 200 : 300,
+          paddingHorizontal: 10,
+          paddingVertical: 7,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: theme.colors.border,
+          backgroundColor: theme.colors.surface1,
+          color: theme.colors.foreground,
+          fontSize: 12,
+        },
         presetHeaderRow: {
           flexDirection: "row",
           alignItems: "center",
@@ -867,26 +878,32 @@ function SettingsForm(props: PluginSurfaceProps) {
             }}
           />
 
-          <SettingsInput
-            key={`base-${formEpoch}`}
+          <SettingsRow
             label={t("settings.baseUrl.label")}
-            disabled={fieldsDisabled}
-            initialValue={fieldsDisabled ? "" : draft.baseUrl}
-            placeholder={
-              draft.format === "gemini"
-                ? FORMAT_DEFAULTS.gemini.baseUrl
-                : "https://api.example.com/v1"
-            }
             hint={
               draft.format === "gemini"
                 ? t("settings.baseUrl.hintGemini")
                 : t("settings.baseUrl.hintOpenai")
             }
-            onChangeText={(baseUrl) => {
-              setDraft((prev) => ({ ...prev, baseUrl }));
-              setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
-            }}
-          />
+          >
+            <TextInput
+              style={[styles.wideTextInput, fieldsDisabled && styles.buttonDisabled]}
+              value={fieldsDisabled ? "" : draft.baseUrl}
+              editable={!fieldsDisabled}
+              placeholder={
+                draft.format === "gemini"
+                  ? FORMAT_DEFAULTS.gemini.baseUrl
+                  : "https://api.example.com/v1"
+              }
+              placeholderTextColor={theme.colors.foregroundMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={(baseUrl) => {
+                setDraft((prev) => ({ ...prev, baseUrl }));
+                setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+              }}
+            />
+          </SettingsRow>
 
           <SettingsInput
             key={`model-${formEpoch}`}
