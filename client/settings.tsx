@@ -846,7 +846,6 @@ function SettingsForm(props: PluginSurfaceProps) {
             label={t("settings.preset.nameLabel")}
             disabled={fieldsDisabled}
             initialValue={fieldsDisabled ? "" : draft.name}
-            placeholder={t("settings.preset.namePlaceholder")}
             onChangeText={(name) => {
               setDraft((prev) => ({ ...prev, name }));
               if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
