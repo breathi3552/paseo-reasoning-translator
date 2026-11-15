@@ -807,6 +807,18 @@ function SettingsForm(props: PluginSurfaceProps) {
             </View>
             <Pressable
               accessibilityRole="button"
+              disabled={revertDisabled}
+              onPress={handleRevertOrCancel}
+              style={[styles.button, revertDisabled && styles.buttonDisabled]}
+            >
+              <Text style={styles.buttonText}>
+                {isCreate
+                  ? t("settings.preset.cancelCreateAction")
+                  : t("settings.preset.revertAction")}
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
               disabled={addDisabled}
               onPress={handleStartCreate}
               style={[styles.button, styles.buttonPrimary, addDisabled && styles.buttonDisabled]}
@@ -918,35 +930,23 @@ function SettingsForm(props: PluginSurfaceProps) {
             }}
           />
 
-          <View style={styles.subbar}>
-            <View style={styles.buttonGroup}>
-              <Pressable
-                accessibilityRole="button"
-                disabled={revertDisabled}
-                onPress={handleRevertOrCancel}
-                style={[styles.button, revertDisabled && styles.buttonDisabled]}
-              >
-                <Text style={styles.buttonText}>
-                  {isCreate
-                    ? t("settings.preset.cancelCreateAction")
-                    : t("settings.preset.revertAction")}
-                </Text>
-              </Pressable>
+          <View style={[styles.subbar, { justifyContent: "space-between" }]}>
+            <Pressable
+              accessibilityRole="button"
+              disabled={fieldsDisabled}
+              onPress={() => {
+                void handleTestConnection();
+              }}
+              style={[styles.button, fieldsDisabled && styles.buttonDisabled]}
+            >
+              <Text style={styles.buttonText}>
+                {testing
+                  ? t("settings.preset.testingAction")
+                  : t("settings.preset.testAction")}
+              </Text>
+            </Pressable>
 
-              <Pressable
-                accessibilityRole="button"
-                disabled={fieldsDisabled}
-                onPress={() => {
-                  void handleTestConnection();
-                }}
-                style={[styles.button, fieldsDisabled && styles.buttonDisabled]}
-              >
-                <Text style={styles.buttonText}>
-                  {testing
-                    ? t("settings.preset.testingAction")
-                    : t("settings.preset.testAction")}
-                </Text>
-              </Pressable>
+            <View style={styles.buttonGroup}>
 
               <Pressable
                 accessibilityRole="button"
