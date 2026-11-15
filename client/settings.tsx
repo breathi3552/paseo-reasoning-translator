@@ -257,7 +257,7 @@ function SettingsForm(props: PluginSurfaceProps) {
     }));
     // Deliberately keep keyInput and keyEpoch untouched so switching format never clears typed API keys.
     setFormEpoch((v) => v + 1);
-    setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+    setStatusMsg(null);
   }
 
   async function handleSelectPreset(nextId: string) {
@@ -287,7 +287,7 @@ function SettingsForm(props: PluginSurfaceProps) {
         result.connection.presets.find((p) => p.id === result.connection.activePresetId)?.name ?? "";
       applySavedConnection(
         result.connection,
-        { kind: "neutral", text: t("settings.preset.switchedToast", { name: nextName }) },
+        { kind: "ok", text: t("settings.preset.switchedToast", { name: nextName }) },
         t("settings.preset.switchedToast", { name: nextName }),
       );
     } catch {
@@ -309,7 +309,7 @@ function SettingsForm(props: PluginSurfaceProps) {
     setDraft(createBlankDraft("gemini"));
     setFormEpoch((v) => v + 1);
     setKeyEpoch((v) => v + 1);
-    setStatusMsg({ kind: "neutral", text: t("settings.preset.statusCreating") });
+    setStatusMsg(null);
   }
 
   function handleRevertOrCancel() {
@@ -318,12 +318,7 @@ function SettingsForm(props: PluginSurfaceProps) {
     setDraft(presetToDraft(activePreset));
     setFormEpoch((v) => v + 1);
     setKeyEpoch((v) => v + 1);
-    setStatusMsg({
-      kind: "neutral",
-      text: isCreate
-        ? t("settings.preset.cancelledCreateStatus")
-        : t("settings.preset.revertedStatus"),
-    });
+    setStatusMsg(null);
   }
 
   async function handleTestConnection() {
@@ -852,7 +847,7 @@ function SettingsForm(props: PluginSurfaceProps) {
               onChangeText={(name) => {
                 setDraft((prev) => ({ ...prev, name }));
                 if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
-                  setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+                  setStatusMsg(null);
                 }
               }}
             />
@@ -900,7 +895,7 @@ function SettingsForm(props: PluginSurfaceProps) {
             }
             onChangeText={(baseUrl) => {
               setDraft((prev) => ({ ...prev, baseUrl }));
-              setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+              setStatusMsg(null);
             }}
           />
 
@@ -918,7 +913,7 @@ function SettingsForm(props: PluginSurfaceProps) {
             onChangeText={(model) => {
               setDraft((prev) => ({ ...prev, model }));
               if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
-                setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+                setStatusMsg(null);
               }
             }}
           />
@@ -941,7 +936,7 @@ function SettingsForm(props: PluginSurfaceProps) {
             onChangeText={(keyInput) => {
               setDraft((prev) => ({ ...prev, keyInput }));
               if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
-                setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+                setStatusMsg(null);
               }
             }}
           />

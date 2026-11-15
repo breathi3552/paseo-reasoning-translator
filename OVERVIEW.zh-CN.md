@@ -2,7 +2,7 @@ Paseo Reasoning Translator 通过 Google Gemini 原生 generateContent 或 OpenA
 
 流式生成期间，时间线显示带宿主节奏的原文。默认采用手动模式：思考块完成后点击「翻译」，仅提交该块；打开会话和加载历史不会自动排队。可选的自动模式会提交已完成的新思考块和已加载的历史记录。译文在原位显示，保留原文与译文切换以及折叠功能；进度查询失败时，点击「继续查询」可恢复同一任务，而不是重新发送模型请求。
 
-插件需要 Paseo daemon 和客户端 0.15.0 或更高版本。翻译默认关闭。从侧边栏或命令中心打开设置，保存连接后再开启。默认格式为 Gemini，Base URL 为 https://generativelanguage.googleapis.com/v1beta，模型为 gemini-3.5-flash-lite。OpenAI 兼容服务需填写 Base URL 和准确模型 ID；SenseNova 可使用 https://api.sensenova.cn/compatible-mode/v2，模型 ID 需从你的账户确认。
+插件需要 Paseo daemon 和客户端 0.15.0 或更高版本。翻译默认关闭。从侧边栏或命令中心打开设置，点击「+ 新增预设」（新建草稿默认填入 Gemini、Base URL https://generativelanguage.googleapis.com/v1beta 与模型 gemini-3.5-flash-lite），保存连接后再开启。OpenAI 兼容服务需填写 Base URL 和准确模型 ID；SenseNova 可使用 https://api.sensenova.cn/compatible-mode/v2，模型 ID 需从你的账户确认。
 
 设置与限制：
 - 支持多连接预设：每个预设独立保存名称、格式、Base URL、模型和 API key，下拉切换互不覆盖（自动兼容读取旧版单连接文件）。保存不发送测试请求，可点击「测试连接」验证。更改格式或地址后必须重新输入新 key，但输入过程中切换格式或修改地址不会清空当前已填入的 key。
