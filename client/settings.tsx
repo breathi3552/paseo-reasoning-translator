@@ -687,23 +687,19 @@ function SettingsForm(props: PluginSurfaceProps) {
     }));
   }, [hasPresets, connection.data, t]);
 
-  const effectiveStatus: StatusMessage = connection.isPending
+  const effectiveStatus: StatusMessage | null = connection.isPending
     ? { kind: "neutral", text: t("settings.status.loading") }
     : connection.isError
       ? { kind: "err", text: t("settings.connection.readError") }
-      : statusMsg ?? {
-          kind: "neutral",
-          text: hasPresets
-            ? t("settings.preset.statusReady")
-            : t("settings.preset.modeEmptyDesc"),
-        };
-
+      : statusMsg && statusMsg.kind !== "neutral"
+        ? statusMsg
+        : null;
   const effectiveStatusColor =
-    effectiveStatus.kind === "err"
+    effectiveStatus?.kind === "err"
       ? theme.colors.statusDanger
-      : effectiveStatus.kind === "ok"
+      : effectiveStatus?.kind === "ok"
         ? theme.colors.statusSuccess
-        : effectiveStatus.kind === "warn"
+        : effectiveStatus?.kind === "warn"
           ? theme.colors.statusWarning
           : theme.colors.foregroundMuted;
 
@@ -801,7 +797,6 @@ function SettingsForm(props: PluginSurfaceProps) {
               <SettingsSelect
                 key={`preset-select-${selectEpoch}`}
                 label={t("settings.preset.activeLabel")}
-                hint={t("settings.preset.activeHint")}
                 value={hasPresets ? connection.data?.activePresetId ?? "" : ""}
                 disabled={selectDisabled}
                 options={presetOptions}
@@ -832,19 +827,11 @@ function SettingsForm(props: PluginSurfaceProps) {
                     : t("settings.preset.modeEmptyPill")}
               </Text>
             </View>
-            <Text numberOfLines={1} style={styles.subbarText}>
-              {isCreate
-                ? t("settings.preset.modeCreateDesc")
-                : activePreset
-                  ? activePreset.name
-                  : t("settings.preset.modeEmptyDesc")}
-            </Text>
           </View>
 
           <SettingsInput
             key={`name-${formEpoch}`}
             label={t("settings.preset.nameLabel")}
-            hint={t("settings.preset.nameHint")}
             disabled={fieldsDisabled}
             initialValue={fieldsDisabled ? "" : draft.name}
             placeholder={t("settings.preset.namePlaceholder")}
@@ -858,7 +845,6 @@ function SettingsForm(props: PluginSurfaceProps) {
 
           <SettingsSelect
             label={t("settings.format.label")}
-            hint={t("settings.format.hint")}
             value={draft.format}
             disabled={fieldsDisabled}
             options={[
@@ -894,7 +880,6 @@ function SettingsForm(props: PluginSurfaceProps) {
           <SettingsInput
             key={`model-${formEpoch}`}
             label={t("settings.model.label")}
-            hint={t("settings.model.hint")}
             disabled={fieldsDisabled}
             initialValue={fieldsDisabled ? "" : draft.model}
             placeholder={
@@ -925,17 +910,6 @@ function SettingsForm(props: PluginSurfaceProps) {
                     ? t("settings.apiKey.placeholderSaved")
                     : t("settings.apiKey.placeholderEmpty")
             }
-            hint={
-              fieldsDisabled && !isCreate && !hasPresets
-                ? t("settings.apiKey.hintEmptyPreset")
-                : isCreate
-                  ? t("settings.apiKey.hintCreate")
-                  : targetChanged
-                    ? t("settings.apiKey.hintTargetChanged")
-                    : activePreset?.hasApiKey
-                      ? t("settings.apiKey.hintEditSaved")
-                      : t("settings.apiKey.hintCreate")
-            }
             onChangeText={(keyInput) => {
               setDraft((prev) => ({ ...prev, keyInput }));
               if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
@@ -944,10 +918,7 @@ function SettingsForm(props: PluginSurfaceProps) {
             }}
           />
 
-          <SettingsRow
-            label={t("settings.preset.actionsLabel")}
-            hint={t("settings.preset.actionsHint")}
-          >
+          <View style={styles.subbar}>
             <View style={styles.buttonGroup}>
               <Pressable
                 accessibilityRole="button"
@@ -1007,12 +978,14 @@ function SettingsForm(props: PluginSurfaceProps) {
                 </Text>
               </Pressable>
             </View>
-          </SettingsRow>
+          </View>
 
           <View style={styles.statusBar}>
-            <Text accessibilityLiveRegion="polite" style={[styles.statusText, { color: effectiveStatusColor }]}>
-              {effectiveStatus.text}
-            </Text>
+            {effectiveStatus ? (
+              <Text accessibilityLiveRegion="polite" style={[styles.statusText, { color: effectiveStatusColor }]}>
+                {effectiveStatus.text}
+              </Text>
+            ) : null}
           </View>
         </SettingsCard>
       </SettingsSection>
@@ -1021,7 +994,6 @@ function SettingsForm(props: PluginSurfaceProps) {
         <SettingsCard>
           <SettingsAction
             label={t("settings.cache.label")}
-            hint={t("settings.cache.hint")}
             actionLabel={
               clearing
                 ? t("settings.cache.clearingAction")
