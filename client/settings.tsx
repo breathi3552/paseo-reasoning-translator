@@ -526,18 +526,6 @@ function SettingsForm(props: PluginSurfaceProps) {
           color: theme.colors.foreground,
           fontSize: 13,
         },
-        urlPreviewRow: {
-          paddingHorizontal: 14,
-          paddingVertical: 6,
-          borderTopWidth: 1,
-          borderTopColor: theme.colors.border,
-          backgroundColor: theme.colors.surface1,
-        },
-        urlPreviewText: {
-          fontSize: 11,
-          lineHeight: 16,
-          color: theme.colors.foregroundMuted,
-        },
         presetHeaderRow: {
           flexDirection: "row",
           alignItems: "center",
@@ -841,7 +829,22 @@ function SettingsForm(props: PluginSurfaceProps) {
             </Pressable>
           </View>
 
-          <View style={styles.subbar}>
+
+          <View style={styles.presetHeaderRow}>
+            <View style={styles.presetSelectWrap}>
+              <SettingsInput
+                key={`name-${formEpoch}`}
+                label={t("settings.preset.nameLabel")}
+                disabled={fieldsDisabled}
+                initialValue={fieldsDisabled ? "" : draft.name}
+                onChangeText={(name) => {
+                  setDraft((prev) => ({ ...prev, name }));
+                  if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
+                    setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
+                  }
+                }}
+              />
+            </View>
             <View style={[styles.modePill, isCreate && styles.modePillCreate]}>
               <Text style={[styles.modePillText, isCreate && styles.modePillTextCreate]}>
                 {isCreate
@@ -852,19 +855,6 @@ function SettingsForm(props: PluginSurfaceProps) {
               </Text>
             </View>
           </View>
-
-          <SettingsInput
-            key={`name-${formEpoch}`}
-            label={t("settings.preset.nameLabel")}
-            disabled={fieldsDisabled}
-            initialValue={fieldsDisabled ? "" : draft.name}
-            onChangeText={(name) => {
-              setDraft((prev) => ({ ...prev, name }));
-              if (statusMsg?.kind === "err" || statusMsg?.kind === "warn") {
-                setStatusMsg({ kind: "neutral", text: t("settings.preset.statusEditing") });
-              }
-            }}
-          />
 
           <SettingsSelect
             label={t("settings.format.label")}
@@ -900,17 +890,6 @@ function SettingsForm(props: PluginSurfaceProps) {
             }}
           />
 
-          <View style={styles.urlPreviewRow}>
-            <Text numberOfLines={1} ellipsizeMode="head" style={styles.urlPreviewText}>
-              {t("settings.baseUrl.preview", {
-                url: fieldsDisabled
-                  ? "—"
-                  : draft.format === "gemini"
-                    ? `${normalizedBaseUrl || "https://.../v1beta"}/models/${draft.model.trim() || "{model}"}:generateContent`
-                    : `${normalizedBaseUrl || "https://.../v1"}/chat/completions`,
-              })}
-            </Text>
-          </View>
 
           <SettingsInput
             key={`model-${formEpoch}`}
