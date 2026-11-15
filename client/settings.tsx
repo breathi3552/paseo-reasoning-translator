@@ -81,14 +81,21 @@ function SettingsForm(props: PluginSurfaceProps) {
   const toast = useToast();
 
   const [mode, setMode] = useState<InlineMode>("edit");
-  const [draft, setDraft] = useState<PresetDraft>(() => createBlankDraft("gemini"));
+  const [draft, setDraft] = useState<PresetDraft>(() => {
+    const initialActive = connection.data?.activePresetId
+      ? connection.data.presets.find((p) => p.id === connection.data?.activePresetId) ?? null
+      : null;
+    return presetToDraft(initialActive);
+  });
   const [formEpoch, setFormEpoch] = useState(0);
   const [keyEpoch, setKeyEpoch] = useState(0);
   const [selectEpoch, setSelectEpoch] = useState(0);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<StatusMessage | null>(null);
-  const lastSyncedRevision = useRef<string | null>(null);
+  const [syncedRevision, setSyncedRevision] = useState<string | null>(
+    () => connection.data?.revision ?? null,
+  );
   const saveLock = useRef(false);
   const testLock = useRef(false);
 
@@ -108,6 +115,7 @@ function SettingsForm(props: PluginSurfaceProps) {
   const isCreate = mode === "create";
 
   const isDirty = useMemo(() => {
+    if (!syncedRevision) return false;
     if (isCreate) {
       return Boolean(
         draft.name.trim() || draft.baseUrl.trim() || draft.model.trim() || draft.keyInput.length > 0,
@@ -121,21 +129,21 @@ function SettingsForm(props: PluginSurfaceProps) {
       draft.model.trim() !== activePreset.model ||
       draft.keyInput.length > 0
     );
-  }, [isCreate, activePreset, draft]);
+  }, [syncedRevision, isCreate, activePreset, draft]);
 
   useEffect(() => {
     if (!connection.data) return;
-    if (lastSyncedRevision.current === connection.data.revision) return;
-    if (mode === "edit" && !isDirty) {
+    if (syncedRevision === connection.data.revision) return;
+    if (syncedRevision === null || (mode === "edit" && !isDirty)) {
       const nextActive = connection.data.activePresetId
         ? connection.data.presets.find((p) => p.id === connection.data.activePresetId) ?? null
         : null;
-      lastSyncedRevision.current = connection.data.revision;
+      setSyncedRevision(connection.data.revision);
       setDraft(presetToDraft(nextActive));
       setFormEpoch((v) => v + 1);
       setKeyEpoch((v) => v + 1);
     }
-  }, [connection.data, mode, isDirty]);
+  }, [connection.data, syncedRevision, mode, isDirty]);
 
   useEffect(() => {
     if (settings.status === "ready") {
@@ -219,7 +227,7 @@ function SettingsForm(props: PluginSurfaceProps) {
     nextStatus: StatusMessage,
     toastMessage: string,
   ) {
-    lastSyncedRevision.current = next.revision;
+    setSyncedRevision(next.revision);
     queries.setQueryData(connectionQueryKey(host.id), next);
     const nextActive = next.activePresetId
       ? next.presets.find((p) => p.id === next.activePresetId) ?? null
