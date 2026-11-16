@@ -24,7 +24,8 @@ test("formats Gemini and OpenAI-compatible requests and extracts only final visi
         if (format === "gemini") {
           assert.equal(url, "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent");
           assert.equal(init.headers["x-goog-api-key"], "offline-test-key");
-          assert.equal(JSON.parse(body.contents[0].parts[0].text).sourceText, "quoted source");
+          assert.equal(body.contents[0].parts[0].text, "<source_text>\nquoted source\n</source_text>");
+          assert.match(body.systemInstruction.parts[0].text, /简体中文/);
           return reply({
             candidates: [{
               finishReason: "STOP",
@@ -34,7 +35,8 @@ test("formats Gemini and OpenAI-compatible requests and extracts only final visi
         }
         assert.equal(url, "https://compat.example/custom/v1/chat/completions");
         assert.equal(init.headers.Authorization, "Bearer offline-test-key");
-        assert.equal(JSON.parse(body.messages[1].content).sourceText, "quoted source");
+        assert.equal(body.messages[1].content, "<source_text>\nquoted source\n</source_text>");
+        assert.match(body.messages[0].content, /简体中文/);
         return reply({
           choices: [{
             finish_reason: "stop",
