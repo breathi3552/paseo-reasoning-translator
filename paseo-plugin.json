@@ -2,7 +2,9 @@
   "id": "paseo-reasoning-translator",
   "name": "Reasoning Translator",
   "description": "Translate visible reasoning through direct Gemini or OpenAI-compatible HTTP APIs, manually by default.",
-  "media": [],
+  "media": [
+    "assets/marketplace/settings.png"
+  ],
   "requirements": {
     "paseo": ">=0.15.0"
   }
