@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { URL } from "node:url";
 import test from "node:test";
+import { defineTranslations } from "@getpaseo/plugin/client";
 import { transpileModule, ModuleKind, JsxEmit, ScriptTarget } from "typescript";
 import * as queries from "../shared/translation-query";
 import * as settings from "../shared/settings";
@@ -14,6 +15,7 @@ import { MemorySettings, MemoryConnection, until } from "./test-helpers";
 
 function timelineHarness(options: { rpc?: (contract: any, input: any) => Promise<unknown>; language?: string } = {}) {
   const language = options.language ?? "zh-CN";
+  const langKey = language.toLowerCase().startsWith("zh") ? "zh" : "en";
   const require = createRequire(import.meta.url);
   let slots: unknown[] = [];
   let cursor = 0;
@@ -59,6 +61,20 @@ function timelineHarness(options: { rpc?: (contract: any, input: any) => Promise
       StyleSheet: { create: (styles: unknown) => styles },
     },
     "@getpaseo/plugin/client": {
+      defineTranslations,
+      useTranslation: (msgs: any) => ({
+        locale: language,
+        t: (key: string, params?: Record<string, unknown>) => {
+          const dict = msgs.resources[langKey] ?? msgs.resources.en;
+          const resolve = (obj: any, path: string) =>
+            path.split(".").reduce((acc, part) => (acc && typeof acc === "object" ? acc[part] : undefined), obj);
+          let template = String(resolve(dict, key) ?? resolve(msgs.resources.en, key) ?? key);
+          if (params) {
+            template = template.replace(/\{\{(\w+)\}\}/g, (m, k) => (params[k] != null ? String(params[k]) : m));
+          }
+          return template;
+        },
+      }),
       useSettings: () => saved,
       useRpc: (contract: unknown) => async (input: unknown) => {
         if (options.rpc) return options.rpc(contract, input);
@@ -94,10 +110,9 @@ function timelineHarness(options: { rpc?: (contract: any, input: any) => Promise
 
   function render(text: string, phase: "streaming" | "complete" = "complete", identity: any = {}) {
     const element = exports.TranslatedReasoning({
-      host: { id: "host", language },
+      host: { id: "host", label: "Host" },
       agentId: "agent",
       ...identity,
-      ...(identity.host ? { host: { language, ...identity.host } } : {}),
       item: { data: { text, phase } },
       theme: { colors: {} },
       layout: { compact: true },

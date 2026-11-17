@@ -3,7 +3,7 @@ import { REASONING_KIND, REASONING_VERSION, reasoningDataSchema } from "./shared
 import { TranslatedReasoning } from "./client/timeline";
 import { TranslationSettingsScreen } from "./client/settings";
 import { TranslationSidebarItem } from "./client/sidebar";
-import { getLanguage, t } from "./client/i18n";
+import { messages } from "./client/i18n";
 
 export default function contribute(client: PluginClientContext) {
   // 1. Timeline Transformer: Intercept built-in reasoning timeline items
@@ -36,9 +36,9 @@ export default function contribute(client: PluginClientContext) {
   });
 
   // 3. Settings Screen (Settings -> Plugins -> paseo-reasoning-translator)
-  const settingsTitle = t("entry.settingsTitle", getLanguage());
-  const screenTitle = t("entry.screenTitle", getLanguage());
-  const commandTitle = t("entry.commandTitle", getLanguage());
+  const settingsTitle = messages.message("entry.settingsTitle");
+  const screenTitle = messages.message("entry.screenTitle");
+  const commandTitle = messages.message("entry.commandTitle");
 
   client.addSettingsScreen({
     id: "translation",

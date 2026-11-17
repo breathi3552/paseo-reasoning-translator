@@ -71,7 +71,7 @@ export function TranslationSettingsScreen(props: PluginSurfaceProps) {
 
 function SettingsForm(props: PluginSurfaceProps) {
   const { theme, layout, host } = props;
-  const { t, language: uiLanguage } = useI18n(props);
+  const { t } = useI18n();
   const settings = useSettings(translationSettings);
   const connection = useConnection(host.id);
   const saveRpc = useRpc(saveConnection);
@@ -169,7 +169,7 @@ function SettingsForm(props: PluginSurfaceProps) {
       if (!(await settings.save({ ...settings.values, ...patch }, settings.revision))) {
         toast.error(
           settings.saveError
-            ? localizeServerError(settings.saveError, uiLanguage)
+            ? localizeServerError(settings.saveError, t)
             : t("settings.saveFailedToast"),
         );
       }
@@ -280,7 +280,7 @@ function SettingsForm(props: PluginSurfaceProps) {
       });
       if (result.status !== "saved") {
         setSelectEpoch((v) => v + 1);
-        setStatusMsg({ kind: "err", text: localizeServerError(result.error, uiLanguage) });
+        setStatusMsg({ kind: "err", text: localizeServerError(result.error, t) });
         return;
       }
       const nextName =
@@ -350,7 +350,7 @@ function SettingsForm(props: PluginSurfaceProps) {
         setStatusMsg({
           kind: "err",
           text: t("settings.preset.testFailedPrefix", {
-            reason: localizeServerError(result.error, uiLanguage),
+            reason: localizeServerError(result.error, t),
           }),
         });
       }
@@ -383,7 +383,7 @@ function SettingsForm(props: PluginSurfaceProps) {
           apiKey: draft.keyInput.trim(),
         });
         if (result.status !== "saved") {
-          setStatusMsg({ kind: "err", text: localizeServerError(result.error, uiLanguage) });
+          setStatusMsg({ kind: "err", text: localizeServerError(result.error, t) });
           return;
         }
         applySavedConnection(
@@ -405,7 +405,7 @@ function SettingsForm(props: PluginSurfaceProps) {
             : { action: "keep" },
         });
         if (result.status !== "saved") {
-          setStatusMsg({ kind: "err", text: localizeServerError(result.error, uiLanguage) });
+          setStatusMsg({ kind: "err", text: localizeServerError(result.error, t) });
           return;
         }
         applySavedConnection(
@@ -441,7 +441,7 @@ function SettingsForm(props: PluginSurfaceProps) {
         id: activePreset.id,
       });
       if (result.status !== "saved") {
-        setStatusMsg({ kind: "err", text: localizeServerError(result.error, uiLanguage) });
+        setStatusMsg({ kind: "err", text: localizeServerError(result.error, t) });
         return;
       }
       const nextName = result.connection.activePresetId
@@ -767,7 +767,7 @@ function SettingsForm(props: PluginSurfaceProps) {
             </SettingsRow>
             {settings.saveError && (
               <Text style={styles.error}>
-                {localizeServerError(settings.saveError, uiLanguage)}
+                {localizeServerError(settings.saveError, t)}
               </Text>
             )}
             {settings.status !== "ready" && (

@@ -4,7 +4,7 @@ import { useI18n } from "./i18n";
 
 export function TranslationSidebarItem(props: PluginSidebarItemProps) {
   const { currentScreen, openScreen } = props;
-  const { t } = useI18n(props);
+  const { t } = useI18n();
   return (
     <SidebarRow
       icon="Languages"

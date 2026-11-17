@@ -20,12 +20,7 @@ import {
 import type { ReasoningData } from "../shared/timeline";
 import { isConnectionConfigured } from "../shared/connection";
 import { useConnection } from "./connection";
-import {
-  localizeServerError,
-  useI18n,
-  type TranslationKey,
-  type TranslationParams,
-} from "./i18n";
+import { localizeServerError, useI18n, type TranslateFn } from "./i18n";
 
 const MONO_FONT =
   typeof Platform !== "undefined" && Platform?.select
@@ -45,7 +40,7 @@ const UI_FONT =
 
 function getReasonLabel(
   reason: string | null,
-  t: (key: TranslationKey, params?: TranslationParams) => string,
+  t: TranslateFn,
 ): string {
   switch (reason) {
     case "disabled":
@@ -88,7 +83,7 @@ function ReasoningBlock(
   props: PluginTimelineItemProps<ReasoningData> & { context: TranslationContext },
 ) {
   const { item, theme, layout, context } = props;
-  const { t, language } = useI18n(props);
+  const { t, locale } = useI18n();
   const isSettingsReady = context.values !== null;
   const isEnabled = Boolean(context.values?.enabled && isConnectionConfigured(context.connection));
   const isManual = context.values?.translationMode !== "automatic";
@@ -415,11 +410,11 @@ function ReasoningBlock(
   if (isComplete) {
     if (isOverLimit) {
       errorTitle = t("timeline.error.overLimitTitle", {
-        length: item.data.text.length.toLocaleString(),
-        limit: MAX_SOURCE_CHARS.toLocaleString(),
+        length: item.data.text.length.toLocaleString(locale),
+        limit: MAX_SOURCE_CHARS.toLocaleString(locale),
       });
       errorMessage = t("timeline.error.overLimitMessage", {
-        limit: MAX_SOURCE_CHARS.toLocaleString(),
+        limit: MAX_SOURCE_CHARS.toLocaleString(locale),
       });
       canRetry = false;
     } else if (submitQuery.isError) {
@@ -428,7 +423,7 @@ function ReasoningBlock(
         submitQuery.error instanceof Error
           ? submitQuery.error.message
           : String(submitQuery.error);
-      errorMessage = localizeServerError(rawError, language);
+      errorMessage = localizeServerError(rawError, t);
       canRetry = true;
     } else if (pollQuery.isError) {
       errorTitle = t("timeline.error.pollFailedTitle");
@@ -436,12 +431,12 @@ function ReasoningBlock(
         pollQuery.error instanceof Error
           ? pollQuery.error.message
           : String(pollQuery.error);
-      errorMessage = localizeServerError(rawError, language);
+      errorMessage = localizeServerError(rawError, t);
       canRetry = true;
     } else if (currentJob?.status === "error") {
       errorTitle = t("timeline.error.jobFailedTitle");
       errorMessage = currentJob.error
-        ? localizeServerError(currentJob.error, language)
+        ? localizeServerError(currentJob.error, t)
         : t("timeline.error.unknownError");
       canRetry = true;
     } else if (currentJob?.status === "skipped") {
