@@ -18,7 +18,7 @@ type Job = {
   retranslateId?: string;
 };
 export interface ServiceOptions {
-  runner?: TranslationRunner; now?: () => number; maxQueue?: number; maxCache?: number; ttlMs?: number; chunkChars?: number;
+  runner?: TranslationRunner; now?: () => number; maxQueue?: number; maxCache?: number; ttlMs?: number; chunkChars?: number; concurrency?: number;
 }
 function response(language = "简体中文", status: TranslationJob["status"] = "skipped", reason: TranslationJob["reason"] = null, error: string | null = null): TranslationJob {
   return { jobId: null, status, translatedText: null, targetLanguage: language, reason, error };
@@ -34,8 +34,10 @@ export class TranslationService {
   private readonly chunkChars: number;
   private readonly jobs = new Map<string, Job>();
   private readonly byKey = new Map<string, Job>();
+  private readonly fixedConcurrency?: number;
+  private configuredConcurrency = 5;
   private queue: Job[] = [];
-  private pumping?: Promise<void>;
+  private readonly activeWorkers = new Set<Promise<void>>();
   private closed = false;
   private generation = 0;
   private invalidationReason: SkipReason = "settings_changed";
@@ -50,6 +52,7 @@ export class TranslationService {
     this.maxCache = options.maxCache ?? 128;
     this.ttlMs = options.ttlMs ?? 30 * 60_000;
     this.chunkChars = options.chunkChars ?? 12_000;
+    this.fixedConcurrency = options.concurrency;
     this.unsubscribeSettings = settings.subscribe(() => { this.invalidate("settings_changed"); });
     this.unsubscribeConnection = connections.subscribe(() => { this.invalidate("connection_changed"); });
   }
@@ -113,6 +116,7 @@ export class TranslationService {
       const settings = await this.readSettings();
       this.assertGeneration(generation);
       language = settings.values.targetLanguage;
+      this.configuredConcurrency = settings.values.concurrency;
       if (input.text.length > MAX_SOURCE_CHARS) return response(language, "error", null, "Reasoning is longer than 200,000 characters. Original text is still available.");
       if (!input.text.trim()) return response(language, "skipped", "empty_text");
       const connection = await this.connections.read();
@@ -162,15 +166,21 @@ export class TranslationService {
     this.invalidate("settings_changed");
     return { cleared };
   }
+  private get concurrencyLimit(): number {
+    return Math.max(1, this.fixedConcurrency ?? this.configuredConcurrency);
+  }
   private schedule() {
-    if (this.pumping || this.closed) return;
-    this.pumping = this.drain().finally(() => {
-      this.pumping = undefined;
-      if (this.queue.length && !this.closed) this.schedule();
-    });
+    if (this.closed) return;
+    while (this.queue.length > 0 && this.activeWorkers.size < this.concurrencyLimit) {
+      const worker = this.drain().finally(() => {
+        this.activeWorkers.delete(worker);
+        if (this.queue.length && !this.closed) this.schedule();
+      });
+      this.activeWorkers.add(worker);
+    }
   }
   private async drain() {
-    while (this.queue.length && !this.closed) {
+    while (this.queue.length && !this.closed && this.activeWorkers.size <= this.concurrencyLimit) {
       const job = this.queue.shift()!;
       if (job.controller.signal.aborted) continue;
       try {
@@ -203,7 +213,7 @@ export class TranslationService {
       await this.unsubscribeSettings();
       this.unsubscribeConnection();
       await this.runner.close();
-      await this.pumping;
+      await Promise.allSettled([...this.activeWorkers]);
       this.jobs.clear(); this.byKey.clear();
     })();
     return this.closing;

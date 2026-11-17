@@ -73,7 +73,7 @@ test("caches sticky errors until explicit retry, supports explicit retranslation
     if (fail) throw new Error("provider failure");
     return req.text === "source" ? "译文-" + recording.requests.length : pending.promise;
   });
-  const f = fixture({ runner: recording.runner, now: () => now, maxQueue: 1, maxCache: 2, ttlMs: 10 });
+  const f = fixture({ runner: recording.runner, now: () => now, maxQueue: 1, maxCache: 2, ttlMs: 10, concurrency: 1 });
   t.after(async () => {
     pending.resolve("done");
     await f.service.close();
@@ -135,4 +135,69 @@ test("settings or connection changes and service close abort active HTTP work an
     }
     await f.service.close();
   }
+});
+
+test("defaults to concurrency 5 and respects configured concurrency from settings", async (t) => {
+  const gates = Array.from({ length: 6 }, () => deferred<string>());
+  let active = 0;
+  let peak = 0;
+  const recording = recordingRunner(async (req) => {
+    active++;
+    peak = Math.max(peak, active);
+    const idx = Number(req.text.split("-")[1]);
+    try {
+      return await gates[idx].promise;
+    } finally {
+      active--;
+    }
+  });
+  const f = fixture({ runner: recording.runner });
+  t.after(async () => {
+    for (const g of gates) g.resolve("ok");
+    await f.service.close();
+  });
+
+  const jobs = await Promise.all(gates.map((_, i) => f.service.submit(f.input(`job-${i}`))));
+  await until(() => recording.requests.length === 5);
+  assert.equal(active, 5);
+  assert.equal(peak, 5);
+
+  gates[0].resolve("done-0");
+  await until(() => recording.requests.length === 6);
+  for (let i = 1; i < 6; i++) gates[i].resolve(`done-${i}`);
+  const results = await Promise.all(jobs.map((job) => terminal(f.service, job)));
+  assert.equal(results.every((r) => r.status === "ready"), true);
+
+  // Reconfigure concurrency to 2 via settings
+  const gates2 = Array.from({ length: 3 }, () => deferred<string>());
+  let active2 = 0;
+  let peak2 = 0;
+  const recording2 = recordingRunner(async (req) => {
+    active2++;
+    peak2 = Math.max(peak2, active2);
+    const idx = Number(req.text.split("-")[1]);
+    try {
+      return await gates2[idx].promise;
+    } finally {
+      active2--;
+    }
+  });
+  const f2 = fixture({ runner: recording2.runner });
+  await f2.settings.change({ concurrency: 2 });
+  t.after(async () => {
+    for (const g of gates2) g.resolve("ok");
+    await f2.service.close();
+  });
+
+  const jobs2 = await Promise.all(gates2.map((_, i) => f2.service.submit(f2.input(`sub-${i}`))));
+  await until(() => recording2.requests.length === 2);
+  assert.equal(active2, 2);
+  assert.equal(peak2, 2);
+
+  gates2[0].resolve("ok-0");
+  await until(() => recording2.requests.length === 3);
+  gates2[1].resolve("ok-1");
+  gates2[2].resolve("ok-2");
+  const results2 = await Promise.all(jobs2.map((job) => terminal(f2.service, job)));
+  assert.equal(results2.every((r) => r.status === "ready"), true);
 });

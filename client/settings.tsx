@@ -102,6 +102,7 @@ function SettingsForm(props: PluginSurfaceProps) {
   const settingsLock = useRef(false);
   const pendingSettingsPatch = useRef<Partial<TranslationSettings> | null>(null);
   const [language, setLanguage] = useState("");
+  const [concurrencyInput, setConcurrencyInput] = useState("5");
   const [clearing, setClearing] = useState(false);
   const clearLock = useRef(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -150,6 +151,11 @@ function SettingsForm(props: PluginSurfaceProps) {
       setLanguage(settings.values.targetLanguage);
     }
   }, [settings.status, settings.status === "ready" ? settings.values.targetLanguage : ""]);
+  useEffect(() => {
+    if (settings.status === "ready") {
+      setConcurrencyInput(String(settings.values.concurrency));
+    }
+  }, [settings.status, settings.status === "ready" ? settings.values.concurrency : 5]);
 
   const normalizedBaseUrl = draft.baseUrl.trim().replace(/\/+$/, "");
   const targetChanged = Boolean(
@@ -199,6 +205,17 @@ function SettingsForm(props: PluginSurfaceProps) {
     }
     setLanguage(next);
     await saveSettings({ targetLanguage: next });
+  }
+  async function commitConcurrency() {
+    if (settings.status !== "ready") return;
+    const parsed = Number.parseInt(concurrencyInput.trim(), 10);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed > 20 || String(parsed) !== concurrencyInput.trim()) {
+      setConcurrencyInput(String(settings.values.concurrency));
+      return;
+    }
+    if (parsed === settings.values.concurrency) return;
+    setConcurrencyInput(String(parsed));
+    await saveSettings({ concurrency: parsed });
   }
 
   function validateDraft(): string | null {
@@ -762,6 +779,27 @@ function SettingsForm(props: PluginSurfaceProps) {
                 }}
                 onBlur={() => {
                   void commitTargetLanguage();
+                }}
+              />
+            </SettingsRow>
+            <SettingsRow
+              label={t("settings.concurrency.label")}
+              hint={t("settings.concurrency.hint")}
+            >
+              <TextInput
+                style={styles.textInput}
+                value={concurrencyInput}
+                onChangeText={setConcurrencyInput}
+                editable={!settingsDisabled}
+                keyboardType="number-pad"
+                placeholder={t("settings.concurrency.placeholder")}
+                placeholderTextColor={theme.colors.foregroundMuted}
+                returnKeyType="done"
+                onSubmitEditing={() => {
+                  void commitConcurrency();
+                }}
+                onBlur={() => {
+                  void commitConcurrency();
                 }}
               />
             </SettingsRow>

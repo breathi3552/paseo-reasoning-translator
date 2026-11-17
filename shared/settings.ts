@@ -5,6 +5,7 @@ export const settingsSchema = z.object({
   enabled: z.boolean().default(false),
   translationMode: z.enum(["manual", "automatic"]).default("manual"),
   targetLanguage: z.string().trim().min(1).max(80).default("简体中文"),
+  concurrency: z.number().int().min(1).max(20).default(5),
 }).strict();
 
 export const translationSettings = defineSettings({
