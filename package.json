@@ -7,12 +7,12 @@
   "author": "breathi3552",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/breathi3552/paseo-think-what.git"
+    "url": "git+https://github.com/breathi3552/paseo-reasoning-translator.git"
   },
   "bugs": {
-    "url": "https://github.com/breathi3552/paseo-think-what/issues"
+    "url": "https://github.com/breathi3552/paseo-reasoning-translator/issues"
   },
-  "homepage": "https://github.com/breathi3552/paseo-think-what#readme",
+  "homepage": "https://github.com/breathi3552/paseo-reasoning-translator#readme",
   "keywords": [
     "paseo",
     "paseo-plugin",
