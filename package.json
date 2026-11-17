@@ -1,7 +1,24 @@
 {
   "name": "paseo-reasoning-translator",
-  "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Translate visible reasoning through direct Gemini or OpenAI-compatible HTTP APIs, manually by default.",
+  "type": "module",
+  "license": "MIT",
+  "author": "breathi3552",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/breathi3552/paseo-think-what.git"
+  },
+  "bugs": {
+    "url": "https://github.com/breathi3552/paseo-think-what/issues"
+  },
+  "homepage": "https://github.com/breathi3552/paseo-think-what#readme",
+  "keywords": [
+    "paseo",
+    "paseo-plugin",
+    "reasoning",
+    "translator"
+  ],
   "files": [
     "paseo-plugin.json",
     "OVERVIEW.md",
